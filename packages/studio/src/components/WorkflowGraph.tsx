@@ -168,10 +168,15 @@ interface WorkflowGraphProps {
 }
 
 export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) => {
+  console.log('WorkflowGraph received data:', workflowData);
+  
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
     if (!workflowData || !workflowData.steps) {
+      console.log('No workflow data or steps available');
       return { nodes: [], edges: [] };
     }
+    
+    console.log('Processing workflow steps:', workflowData.steps);
 
     const nodes: Node[] = [];
     const edges: Edge[] = [];
@@ -378,23 +383,27 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
   if (!workflowData || !workflowData.steps || workflowData.steps.length === 0) {
     return (
       <div style={{
-        height: '400px',
+        height: '100%',
+        minHeight: '400px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#f9fafb',
-        border: '2px dashed #d1d5db',
-        borderRadius: '8px',
         color: '#6b7280',
-        fontSize: '16px'
+        fontSize: '16px',
+        flexDirection: 'column',
+        gap: '8px'
       }}>
-        📊 Create a workflow to see the visual graph
+        <div>📊 Create a workflow to see the visual graph</div>
+        <div style={{ fontSize: '12px', opacity: 0.7 }}>
+          {!workflowData ? 'No data' : !workflowData.steps ? 'No steps' : 'Empty workflow'}
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ height: '600px', border: '2px solid #e5e7eb', borderRadius: '8px' }}>
+    <div style={{ height: '100%', minHeight: '500px', width: '100%' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

@@ -261,15 +261,33 @@ function initializeAI() {
 }
 
 export function App() {
-  const [story, setStory] = useState(`Flow: Approve Vacation Request
-Ask employee for {vacation_dates} and {reason}
-Ask manager to approve the request
-If approved
-  Do: update HR system with {vacation_dates}
-  Send email to employee: "Vacation approved"
+  const [story, setStory] = useState(`Flow: Advanced Order Processing System
+
+Ask customer for {order_details} and {payment_method}
+Do: validate customer information using verification service
+Do: calculate order total with taxes and shipping
+
+If {order_total} > 1000
+  Ask manager to approve high-value order
+  If manager_approved
+    Do: process payment using secure gateway
+    Send confirmation email to customer: "Large order approved"
+  Otherwise
+    Send rejection email: "High-value order requires approval"
+    Stop
+Otherwise
+  Do: process standard payment automatically
+  Do: reserve inventory items
+
+Send tracking notification to customer
+Wait for shipping confirmation
+
+If items_shipped
+  Do: update order status to "shipped"
+  Send shipping notification with {tracking_number}
   Stop
 Otherwise
-  Send email to employee: "Vacation denied"
+  Ask warehouse team to resolve shipping issue
   Stop`);
 
   const [converted, setConverted] = useState('');
@@ -695,10 +713,25 @@ Otherwise
             <div style={{ 
               border: '2px solid #e5e7eb', 
               borderRadius: '8px', 
-              height: '400px',
-              backgroundColor: '#fafafa'
+              height: '500px',
+              backgroundColor: '#fafafa',
+              overflow: 'hidden'
             }}>
-              <WorkflowGraph workflowData={converted ? JSON.parse(converted) : null} />
+              <WorkflowGraph workflowData={(() => {
+                try {
+                  if (!converted) {
+                    console.log('No converted data available');
+                    return null;
+                  }
+                  const parsed = JSON.parse(converted);
+                  console.log('Parsed workflow data:', parsed);
+                  return parsed;
+                } catch (error) {
+                  console.error('Failed to parse workflow data:', error);
+                  console.log('Raw converted data:', converted);
+                  return null;
+                }
+              })()} />
             </div>
           </div>
         )}
