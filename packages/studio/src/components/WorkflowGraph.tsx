@@ -127,14 +127,60 @@ const TaskNode = ({ data }: { data: any }) => {
 };
 
 const GatewayNode = ({ data }: { data: any }) => {
+  // Determine gateway type and styling
+  const getGatewayConfig = (gatewayType: string) => {
+    const configs = {
+      'exclusive': {
+        symbol: '×',
+        color: '#f59e0b',
+        backgroundColor: '#fbbf24',
+        description: 'Exclusive (XOR)',
+        handles: ['top', 'bottom', 'right'] // Yes/No branches
+      },
+      'parallel': {
+        symbol: '+',
+        color: '#3b82f6',
+        backgroundColor: '#60a5fa',
+        description: 'Parallel (AND)',
+        handles: ['top', 'bottom', 'left', 'right'] // Multiple parallel branches
+      },
+      'inclusive': {
+        symbol: '○',
+        color: '#8b5cf6',
+        backgroundColor: '#a78bfa',
+        description: 'Inclusive (OR)',
+        handles: ['top', 'bottom', 'left', 'right'] // Optional parallel branches
+      },
+      'complex': {
+        symbol: '*',
+        color: '#ef4444',
+        backgroundColor: '#f87171',
+        description: 'Complex Gateway',
+        handles: ['top', 'bottom', 'left', 'right'] // Complex logic
+      },
+      'event': {
+        symbol: '⚡',
+        color: '#10b981',
+        backgroundColor: '#34d399',
+        description: 'Event-Based',
+        handles: ['top', 'bottom', 'left', 'right'] // Event-driven branches
+      }
+    };
+    
+    return configs[gatewayType as keyof typeof configs] || configs.exclusive;
+  };
+
+  const gatewayType = data.gatewayType || 'exclusive';
+  const config = getGatewayConfig(gatewayType);
+
   return (
     <div style={{ position: 'relative' }}>
       {/* BPMN-compliant diamond shape */}
       <div style={{
         width: '60px',
         height: '60px',
-        backgroundColor: '#fbbf24',
-        border: '3px solid #f59e0b',
+        backgroundColor: config.backgroundColor,
+        border: `3px solid ${config.color}`,
         borderRadius: '4px',
         transform: 'rotate(45deg)',
         display: 'flex',
@@ -143,16 +189,35 @@ const GatewayNode = ({ data }: { data: any }) => {
         boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
         position: 'relative'
       }}>
-        {/* Decision icon */}
+        {/* Gateway symbol */}
         <div style={{ 
           transform: 'rotate(-45deg)',
           fontWeight: 'bold',
-          color: '#92400e',
-          fontSize: '20px',
+          color: gatewayType === 'inclusive' ? 'white' : '#1f2937',
+          fontSize: gatewayType === 'event' ? '16px' : '20px',
           lineHeight: '1'
         }}>
-          ◊
+          {config.symbol}
         </div>
+      </div>
+      
+      {/* Gateway type label */}
+      <div style={{
+        position: 'absolute',
+        top: '-35px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        backgroundColor: config.color,
+        color: 'white',
+        padding: '2px 6px',
+        borderRadius: '3px',
+        fontSize: '9px',
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+        letterSpacing: '0.5px'
+      }}>
+        {config.description}
       </div>
       
       {/* Condition label below the diamond */}
@@ -162,7 +227,7 @@ const GatewayNode = ({ data }: { data: any }) => {
         left: '50%',
         transform: 'translateX(-50%)',
         backgroundColor: 'white',
-        border: '1px solid #e5e7eb',
+        border: `1px solid ${config.color}`,
         borderRadius: '4px',
         padding: '4px 8px',
         fontSize: '11px',
@@ -174,10 +239,10 @@ const GatewayNode = ({ data }: { data: any }) => {
         overflow: 'hidden',
         textOverflow: 'ellipsis'
       }}>
-        {data.condition || data.description || 'Decision'}
+        {data.condition || data.description || 'Gateway'}
       </div>
       
-      {/* Handles positioned correctly for diamond */}
+      {/* Dynamic handles based on gateway type */}
       <Handle 
         type="target" 
         position={Position.Top} 
@@ -185,12 +250,14 @@ const GatewayNode = ({ data }: { data: any }) => {
           top: '-5px',
           left: '50%',
           transform: 'translateX(-50%)',
-          backgroundColor: '#f59e0b',
+          backgroundColor: config.color,
           border: '2px solid white',
           width: '10px',
           height: '10px'
         }} 
       />
+      
+      {/* Bottom handle (always present) */}
       <Handle 
         type="source" 
         position={Position.Bottom} 
@@ -199,26 +266,48 @@ const GatewayNode = ({ data }: { data: any }) => {
           bottom: '-5px',
           left: '50%', 
           transform: 'translateX(-50%)',
-          backgroundColor: '#059669',
+          backgroundColor: gatewayType === 'exclusive' ? '#059669' : config.color,
           border: '2px solid white',
           width: '10px',
           height: '10px'
         }} 
       />
-      <Handle 
-        type="source" 
-        position={Position.Right} 
-        id="right"
-        style={{ 
-          right: '-5px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          backgroundColor: '#dc2626',
-          border: '2px solid white',
-          width: '10px',
-          height: '10px'
-        }} 
-      />
+      
+      {/* Right handle (conditional) */}
+      {config.handles.includes('right') && (
+        <Handle 
+          type="source" 
+          position={Position.Right} 
+          id="right"
+          style={{ 
+            right: '-5px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            backgroundColor: gatewayType === 'exclusive' ? '#dc2626' : config.color,
+            border: '2px solid white',
+            width: '10px',
+            height: '10px'
+          }} 
+        />
+      )}
+      
+      {/* Left handle (for parallel/inclusive/complex/event gateways) */}
+      {config.handles.includes('left') && (
+        <Handle 
+          type="source" 
+          position={Position.Left} 
+          id="left"
+          style={{ 
+            left: '-5px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            backgroundColor: config.color,
+            border: '2px solid white',
+            width: '10px',
+            height: '10px'
+          }} 
+        />
+      )}
     </div>
   );
 };
@@ -330,6 +419,26 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
         description = step.if;
         gatewayNodeId = nodeId;
 
+        // Determine gateway type based on condition complexity
+        let gatewayType = 'exclusive'; // Default XOR gateway
+        
+        // Check for parallel conditions (AND logic)
+        if (description.includes(' and ') || description.includes(' && ')) {
+          gatewayType = 'parallel';
+        }
+        // Check for inclusive conditions (OR logic)  
+        else if (description.includes(' or ') || description.includes(' || ')) {
+          gatewayType = 'inclusive';
+        }
+        // Check for complex conditions (multiple operators)
+        else if ((description.match(/[<>=!]/g) || []).length > 1) {
+          gatewayType = 'complex';
+        }
+        // Check for event-based conditions
+        else if (description.includes('receives') || description.includes('triggered') || description.includes('event')) {
+          gatewayType = 'event';
+        }
+
         nodes.push({
           id: nodeId,
           type: nodeType,
@@ -337,7 +446,8 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
           data: { 
             taskType,
             description: `If ${description}`,
-            condition: step.if
+            condition: step.if,
+            gatewayType: gatewayType
           }
         });
 

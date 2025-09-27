@@ -192,9 +192,52 @@ If {inventory_level} < {minimum_threshold}
 If {business_hours} = true
 ```
 
-**BPMN Mapping:** Exclusive gateways with labeled branches ("Yes"/"No")
+**BPMN Mapping:** Multiple gateway types supported:
+- **Exclusive Gateway (XOR)**: Simple If/Otherwise conditions
+- **Parallel Gateway (AND)**: Conditions with "and" logic
+- **Inclusive Gateway (OR)**: Conditions with "or" logic  
+- **Complex Gateway**: Multiple operators and complex expressions
+- **Event-Based Gateway**: Event-driven conditions
 
-#### 3.2 Nested Branching
+#### 3.2 Gateway Types and Usage
+
+**Exclusive Gateway (XOR) - Default:**
+```kflow
+If {payment_verified}
+  Do: process order
+Otherwise
+  Send payment error notification
+```
+
+**Parallel Gateway (AND) - Concurrent Execution:**
+```kflow
+If {payment_verified} and {inventory_available}
+  Do: process order and reserve inventory
+  Do: generate shipping label and send notification
+```
+
+**Inclusive Gateway (OR) - Optional Parallel Paths:**
+```kflow
+If {priority_customer} or {large_order}
+  Ask manager for special handling
+  Do: apply priority processing
+```
+
+**Complex Gateway - Advanced Logic:**
+```kflow
+If {order_value} > 1000 and {customer_rating} < 3
+  Ask credit team for approval
+  Do: run additional verification checks
+```
+
+**Event-Based Gateway - Event-Driven:**
+```kflow
+If system receives payment_confirmation event
+  Do: update order status
+  Send confirmation to customer
+```
+
+#### 3.3 Nested Branching
 Kflow supports unlimited nesting of conditional logic:
 
 ```kflow
