@@ -1,0 +1,13 @@
+flow: Approve Vacation
+steps:
+  - ask: manager to approve {dates} for {employee}
+    id: askApproval
+    if:
+      cond: ${approved}
+      then:
+        - do: update HR system with {dates}
+        - send: email to {employee} "Approved"
+        - stop: success
+      else:
+        - send: email to {employee} "Not approved"
+        - stop: success

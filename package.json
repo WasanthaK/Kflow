@@ -1,0 +1,14 @@
+{
+  "name": "kflow",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Human-first, AI-assisted workflow language",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "test": "pnpm -r run test"
+  }
+}

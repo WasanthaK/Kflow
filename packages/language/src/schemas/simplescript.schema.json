@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kflow.dev/schema/simplescript-1.0.json",
+  "title": "SimpleScript",
+  "type": "object",
+  "required": ["flow", "steps"],
+  "properties": {
+    "flow": { "type": "string" },
+    "trigger": { "type": ["string", "object"] },
+    "vars": { "type": "object", "additionalProperties": true },
+    "steps": { "$ref": "#/definitions/steps" }
+  },
+  "definitions": {
+    "steps": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/step" },
+      "minItems": 1
+    },
+    "step": {
+      "type": "object",
+      "oneOf": [
+        {"required": ["do"]},
+        {"required": ["ask"]},
+        {"required": ["send"]},
+        {"required": ["receive"]},
+        {"required": ["wait"]},
+        {"required": ["if"]},
+        {"required": ["meanwhile"]},
+        {"required": ["repeat"]},
+        {"required": ["remember"]},
+        {"required": ["stop"]}
+      ],
+      "properties": {
+        "id": {"type": "string"},
+        "do": {"type": ["string", "object"]},
+        "ask": {"type": ["string", "object"]},
+        "send": {"type": ["string", "object"]},
+        "receive": {"type": ["string", "object"]},
+        "wait": {"type": ["string", "object"]},
+        "if": {
+          "type": "object",
+          "properties": {
+            "cond": {"type": "string"},
+            "then": {"$ref": "#/definitions/steps"},
+            "else": {"$ref": "#/definitions/steps"}
+          },
+          "required": ["cond", "then"]
+        },
+        "meanwhile": {"$ref": "#/definitions/steps"},
+        "repeat": {
+          "type": "object",
+          "properties": {
+            "every": {"type": "string"},
+            "until": {"type": "string"},
+            "steps": {"$ref": "#/definitions/steps"}
+          },
+          "required": ["steps"]
+        },
+        "remember": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "stop": {"type": ["boolean", "string", "object"]},
+        "retry": {"type": ["boolean", "object"]},
+        "timeout": {"type": ["string", "number"]}
+      },
+      "additionalProperties": true
+    }
+  }
+}
