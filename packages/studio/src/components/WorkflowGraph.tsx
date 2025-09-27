@@ -168,23 +168,18 @@ interface WorkflowGraphProps {
 }
 
 export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) => {
-  console.log('WorkflowGraph received data:', workflowData);
-  
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
     if (!workflowData || !workflowData.steps) {
-      console.log('No workflow data or steps available');
       return { nodes: [], edges: [] };
     }
-    
-    console.log('Processing workflow steps:', workflowData.steps);
 
     const nodes: Node[] = [];
     const edges: Edge[] = [];
     
-    // Layout configuration
-    const centerX = 300;
-    const nodeSpacing = 120;
-    const branchOffset = 250;
+    // Enhanced layout configuration
+    const centerX = 400;
+    const nodeSpacing = 100;
+    const branchOffset = 300;
     let yPosition = 50;
     let nodeCounter = 0;
 
@@ -199,13 +194,18 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
     let previousNodeId = 'start';
     yPosition += nodeSpacing;
 
-    // Track branch context
+    // Enhanced branch tracking with nesting support
     let currentBranch: 'main' | 'if' | 'otherwise' = 'main';
+    let branchStack: Array<{
+      gatewayId: string;
+      type: 'if' | 'otherwise';
+      returnY: number;
+      returnX: number;
+    }> = [];
     let gatewayNodeId: string | null = null;
-    let ifBranchNodes: string[] = [];
-    let otherwiseBranchNodes: string[] = [];
-    let joinNodeId: string | null = null;
+    let branchStartY = yPosition;
 
+    // Process each step with improved branching logic
     workflowData.steps.forEach((step: any, index: number) => {
       const nodeId = `node-${++nodeCounter}`;
       let nodeType = 'task';
@@ -214,13 +214,12 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
       let subtype = '';
       let xPosition = centerX;
 
-      // Handle IF condition
+      // Handle IF condition (Gateway)
       if (step.if) {
         nodeType = 'gateway';
         taskType = 'gateway';
         description = step.if;
         gatewayNodeId = nodeId;
-        currentBranch = 'main';
 
         nodes.push({
           id: nodeId,
@@ -234,28 +233,39 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
         });
 
         // Connect previous to gateway
-        edges.push({
-          id: `edge-${previousNodeId}-${nodeId}`,
-          source: previousNodeId,
-          target: nodeId,
-          animated: true
+        if (previousNodeId) {
+          edges.push({
+            id: `edge-${previousNodeId}-${nodeId}`,
+            source: previousNodeId,
+            target: nodeId,
+            animated: true
+          });
+        }
+
+        // Save current state for branching
+        branchStack.push({
+          gatewayId: nodeId,
+          type: 'if',
+          returnY: yPosition,
+          returnX: centerX
         });
 
         previousNodeId = nodeId;
         yPosition += nodeSpacing;
         currentBranch = 'if';
+        branchStartY = yPosition;
         return;
       }
 
       // Handle OTHERWISE condition
       if (step.otherwise) {
+        // Switch to otherwise branch
         currentBranch = 'otherwise';
-        // Reset position to gateway level for otherwise branch
-        if (gatewayNodeId) {
-          const gatewayNode = nodes.find(n => n.id === gatewayNodeId);
-          if (gatewayNode) {
-            yPosition = gatewayNode.position.y + nodeSpacing;
-          }
+        // Reset to gateway level for otherwise branch
+        if (branchStack.length > 0) {
+          const currentGateway = branchStack[branchStack.length - 1];
+          yPosition = currentGateway.returnY + nodeSpacing;
+          branchStartY = yPosition;
         }
         return;
       }
@@ -268,8 +278,8 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
         taskType = mainKey;
         const taskData = step[mainKey];
         
-        if (typeof taskData === 'object' && taskData.description) {
-          description = taskData.description;
+        if (typeof taskData === 'object' && taskData !== null) {
+          description = taskData.description || JSON.stringify(taskData);
           subtype = taskData.subtype || taskData.type;
         } else if (typeof taskData === 'string') {
           description = taskData;
@@ -283,28 +293,27 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
       // Position nodes based on current branch
       if (currentBranch === 'if') {
         xPosition = centerX - branchOffset;
-        ifBranchNodes.push(nodeId);
       } else if (currentBranch === 'otherwise') {
         xPosition = centerX + branchOffset;
-        otherwiseBranchNodes.push(nodeId);
       } else {
         xPosition = centerX;
       }
 
+      // Create the node
       nodes.push({
         id: nodeId,
         type: nodeType,
         position: { x: xPosition, y: yPosition },
         data: { 
           taskType,
-          description: description.length > 50 ? description.substring(0, 47) + '...' : description,
+          description: description.length > 60 ? description.substring(0, 57) + '...' : description,
           subtype,
           fullDescription: description
         }
       });
 
-      // Connect nodes
-      if (currentBranch === 'if' && gatewayNodeId && ifBranchNodes.length === 1) {
+      // Connect nodes with improved logic
+      if (currentBranch === 'if' && gatewayNodeId && yPosition === branchStartY) {
         // First node in IF branch - connect from gateway
         edges.push({
           id: `edge-${gatewayNodeId}-${nodeId}`,
@@ -314,7 +323,7 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
           animated: true,
           style: { stroke: '#10b981' }
         });
-      } else if (currentBranch === 'otherwise' && gatewayNodeId && otherwiseBranchNodes.length === 1) {
+      } else if (currentBranch === 'otherwise' && gatewayNodeId && yPosition === branchStartY) {
         // First node in OTHERWISE branch - connect from gateway
         edges.push({
           id: `edge-${gatewayNodeId}-${nodeId}`,
@@ -324,9 +333,10 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
           animated: true,
           style: { stroke: '#ef4444' }
         });
-      } else if (previousNodeId && (currentBranch === 'main' || 
-        (currentBranch === 'if' && ifBranchNodes.length > 1) ||
-        (currentBranch === 'otherwise' && otherwiseBranchNodes.length > 1))) {
+      } else if (previousNodeId && 
+                 (currentBranch === 'main' || 
+                  (currentBranch === 'if' && yPosition > branchStartY) ||
+                  (currentBranch === 'otherwise' && yPosition > branchStartY))) {
         // Connect within branch or main flow
         edges.push({
           id: `edge-${previousNodeId}-${nodeId}`,
@@ -339,24 +349,17 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
       previousNodeId = nodeId;
       yPosition += nodeSpacing;
 
-      // Handle end of branches
+      // Handle end events - reset branch context
       if (taskType === 'endEvent' || taskType === 'stop') {
-        if (currentBranch === 'if') {
-          // Create join node if we have both branches ending
-          if (otherwiseBranchNodes.length > 0) {
-            const lastOtherwiseNode = otherwiseBranchNodes[otherwiseBranchNodes.length - 1];
-            const lastOtherwiseStep = nodes.find(n => n.id === lastOtherwiseNode);
-            if (lastOtherwiseStep?.data.taskType === 'endEvent' || lastOtherwiseStep?.data.taskType === 'stop') {
-              // Both branches end - we might want to add a join node here
-              joinNodeId = `join-${nodeCounter}`;
-            }
-          }
-        }
-        
-        // Reset to main flow after end events
         if (currentBranch !== 'main') {
+          // Pop the branch context
+          if (branchStack.length > 0) {
+            branchStack.pop();
+          }
           currentBranch = 'main';
           xPosition = centerX;
+          // Continue after the gateway
+          yPosition = Math.max(yPosition, branchStartY + nodeSpacing * 3);
         }
       }
     });
@@ -412,19 +415,28 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         fitView
+        fitViewOptions={{
+          padding: 0.1,
+          includeHiddenNodes: false,
+          minZoom: 0.1,
+          maxZoom: 2
+        }}
         attributionPosition="bottom-left"
+        defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
       >
-        <Controls />
+        <Controls position="top-right" />
         <MiniMap 
           style={{
             height: 120,
+            width: 200,
             backgroundColor: '#f9fafb',
             border: '1px solid #e5e7eb'
           }}
           zoomable
           pannable
+          position="bottom-right"
         />
-        <Background gap={12} size={1} />
+        <Background gap={20} size={2} color="#e5e7eb" />
       </ReactFlow>
     </div>
   );

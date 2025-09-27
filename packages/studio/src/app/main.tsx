@@ -302,6 +302,7 @@ Otherwise
   const [showAiSetup, setShowAiSetup] = useState(false);
   const [suggestions, setSuggestions] = useState<AutocompleteSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [graphFullscreen, setGraphFullscreen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleConvert = useCallback(async () => {
@@ -709,7 +710,24 @@ Otherwise
         {/* Right Panel - Visual Graph */}
         {showGraph && (
           <div>
-            <h3 style={{ margin: '0 0 16px 0', fontWeight: '600', fontSize: '16px' }}>📊 Visual Workflow Graph:</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontWeight: '600', fontSize: '16px' }}>📊 Visual Workflow Graph:</h3>
+              <button
+                onClick={() => setGraphFullscreen(!graphFullscreen)}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                {graphFullscreen ? '📱 Exit Fullscreen' : '🖥️ Fullscreen'}
+              </button>
+            </div>
             <div style={{ 
               border: '2px solid #e5e7eb', 
               borderRadius: '8px', 
@@ -736,6 +754,60 @@ Otherwise
           </div>
         )}
       </div>
+
+      {/* Fullscreen Graph Modal */}
+      {graphFullscreen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'white',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '16px 20px',
+            borderBottom: '2px solid #e5e7eb',
+            backgroundColor: '#f9fafb'
+          }}>
+            <h2 style={{ margin: 0, color: '#1f2937', fontSize: '20px' }}>
+              📊 {converted ? JSON.parse(converted).flow : 'Workflow Graph'} - Fullscreen View
+            </h2>
+            <button
+              onClick={() => setGraphFullscreen(false)}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#dc2626',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '14px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+            >
+              ✕ Close Fullscreen
+            </button>
+          </div>
+          <div style={{ flex: 1, backgroundColor: '#fafafa' }}>
+            <WorkflowGraph workflowData={(() => {
+              try {
+                if (!converted) return null;
+                return JSON.parse(converted);
+              } catch (error) {
+                console.error('Fullscreen graph parse error:', error);
+                return null;
+              }
+            })()} />
+          </div>
+        </div>
+      )}
 
       {/* Output Panel */}
       {converted && (
