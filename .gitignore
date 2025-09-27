@@ -5,3 +5,9 @@ dist
 .vscode
 coverage
 *.log
+
+# Environment files (contains sensitive API keys)
+.env
+.env.local
+.env.example
+.env.*.local
