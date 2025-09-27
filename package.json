@@ -9,6 +9,9 @@
   "scripts": {
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
-    "test": "pnpm -r run test"
+    "test": "pnpm -r run test",
+    "build:production": "pnpm --filter @kflow/language build && pnpm --filter @kflow/studio build",
+    "preview": "pnpm --filter @kflow/studio preview",
+    "deploy:azure": "echo 'Push to main branch to trigger Azure deployment'"
   }
 }

@@ -16,7 +16,7 @@ export function activate(context: ExtensionContext) {
     )
   );
 
-  collection.set([], []);
+  // Initialize empty diagnostics collection
 }
 
 export function deactivate() {}
