@@ -1,0 +1,31 @@
+{
+  "name": "kflow-vscode",
+  "displayName": "Kflow",
+  "version": "0.0.1",
+  "publisher": "kflow",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other"],
+  "main": "dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "storyflow",
+        "aliases": ["StoryFlow"],
+        "extensions": [".story"],
+        "configuration": "./language-configuration.json"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint 'src/**/*.ts'",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^1.5.0",
+    "eslint": "^9.0.0"
+  }
+}
