@@ -25,11 +25,11 @@ const TaskNode = ({ data }: { data: any }) => {
       messageTask: '📧',
       waitTask: '⏳',
       endEvent: '🛑',
-      ask: '❓',
-      do: '⚡',
-      send: '📤',
+      ask: '👤',
+      do: '⚙️',
+      send: '�',
       wait: '⏳',
-      stop: '⏹️'
+      stop: '🛑'
     };
     return icons[taskType as keyof typeof icons] || '❓';
   };
@@ -54,83 +54,171 @@ const TaskNode = ({ data }: { data: any }) => {
 
   return (
     <div style={{
-      padding: '10px 15px',
-      borderRadius: '8px',
+      padding: '12px 16px',
+      borderRadius: '6px',
       backgroundColor: 'white',
-      border: `2px solid ${getTaskColor(data.taskType)}`,
-      minWidth: '150px',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+      border: `3px solid ${getTaskColor(data.taskType)}`,
+      minWidth: '160px',
+      maxWidth: '220px',
+      boxShadow: '0 3px 6px rgba(0,0,0,0.15)',
+      position: 'relative'
     }}>
-      <Handle type="target" position={Position.Top} />
+      <Handle 
+        type="target" 
+        position={Position.Top}
+        style={{
+          backgroundColor: getTaskColor(data.taskType),
+          border: '2px solid white',
+          width: '10px',
+          height: '10px'
+        }}
+      />
       <div style={{
         display: 'flex',
         alignItems: 'center',
         gap: '8px',
-        marginBottom: '4px'
+        marginBottom: '6px'
       }}>
-        <span style={{ fontSize: '16px' }}>{getTaskIcon(data.taskType)}</span>
+        <span style={{ fontSize: '18px' }}>{getTaskIcon(data.taskType)}</span>
         <span style={{ 
-          fontSize: '12px', 
-          fontWeight: '600',
+          fontSize: '11px', 
+          fontWeight: '700',
           color: getTaskColor(data.taskType),
-          textTransform: 'uppercase'
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px'
         }}>
-          {data.taskType}
+          {data.taskType.replace(/([A-Z])/g, ' $1').trim()}
         </span>
       </div>
       <div style={{
         fontSize: '13px',
         fontWeight: '500',
-        color: '#374151',
-        lineHeight: '1.3'
+        color: '#1f2937',
+        lineHeight: '1.4',
+        marginBottom: data.subtype ? '4px' : '0'
       }}>
         {data.description}
       </div>
       {data.subtype && (
         <div style={{
-          fontSize: '11px',
+          fontSize: '10px',
           color: '#6b7280',
-          marginTop: '4px',
-          fontStyle: 'italic'
+          fontStyle: 'italic',
+          backgroundColor: '#f9fafb',
+          padding: '2px 6px',
+          borderRadius: '3px',
+          display: 'inline-block'
         }}>
-          {data.subtype}
+          {data.subtype.replace(/_/g, ' ')}
         </div>
       )}
-      <Handle type="source" position={Position.Bottom} />
+      <Handle 
+        type="source" 
+        position={Position.Bottom}
+        style={{
+          backgroundColor: getTaskColor(data.taskType),
+          border: '2px solid white',
+          width: '10px',
+          height: '10px'
+        }}
+      />
     </div>
   );
 };
 
 const GatewayNode = ({ data }: { data: any }) => {
   return (
-    <div style={{
-      width: '80px',
-      height: '80px',
-      backgroundColor: '#fbbf24',
-      border: '3px solid #f59e0b',
-      borderRadius: '8px',
-      transform: 'rotate(45deg)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: '16px',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-      position: 'relative'
-    }}>
-      <Handle type="target" position={Position.Top} style={{ transform: 'rotate(-45deg)' }} />
-      <div style={{ 
-        transform: 'rotate(-45deg)',
-        fontWeight: 'bold',
-        color: '#92400e',
-        textAlign: 'center',
-        fontSize: '12px',
-        lineHeight: '1.2'
+    <div style={{ position: 'relative' }}>
+      {/* BPMN-compliant diamond shape */}
+      <div style={{
+        width: '60px',
+        height: '60px',
+        backgroundColor: '#fbbf24',
+        border: '3px solid #f59e0b',
+        borderRadius: '4px',
+        transform: 'rotate(45deg)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
+        position: 'relative'
       }}>
-        ?
+        {/* Decision icon */}
+        <div style={{ 
+          transform: 'rotate(-45deg)',
+          fontWeight: 'bold',
+          color: '#92400e',
+          fontSize: '20px',
+          lineHeight: '1'
+        }}>
+          ◊
+        </div>
       </div>
-      <Handle type="source" position={Position.Bottom} style={{ transform: 'rotate(-45deg)' }} />
-      <Handle type="source" position={Position.Left} style={{ transform: 'rotate(-45deg)' }} />
-      <Handle type="source" position={Position.Right} style={{ transform: 'rotate(-45deg)' }} />
+      
+      {/* Condition label below the diamond */}
+      <div style={{
+        position: 'absolute',
+        top: '70px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        backgroundColor: 'white',
+        border: '1px solid #e5e7eb',
+        borderRadius: '4px',
+        padding: '4px 8px',
+        fontSize: '11px',
+        fontWeight: '600',
+        color: '#374151',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        whiteSpace: 'nowrap',
+        maxWidth: '150px',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
+      }}>
+        {data.condition || data.description || 'Decision'}
+      </div>
+      
+      {/* Handles positioned correctly for diamond */}
+      <Handle 
+        type="target" 
+        position={Position.Top} 
+        style={{ 
+          top: '-5px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: '#f59e0b',
+          border: '2px solid white',
+          width: '10px',
+          height: '10px'
+        }} 
+      />
+      <Handle 
+        type="source" 
+        position={Position.Bottom} 
+        id="bottom"
+        style={{ 
+          bottom: '-5px',
+          left: '50%', 
+          transform: 'translateX(-50%)',
+          backgroundColor: '#059669',
+          border: '2px solid white',
+          width: '10px',
+          height: '10px'
+        }} 
+      />
+      <Handle 
+        type="source" 
+        position={Position.Right} 
+        id="right"
+        style={{ 
+          right: '-5px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          backgroundColor: '#dc2626',
+          border: '2px solid white',
+          width: '10px',
+          height: '10px'
+        }} 
+      />
     </div>
   );
 };
@@ -138,21 +226,42 @@ const GatewayNode = ({ data }: { data: any }) => {
 const StartNode = ({ data }: { data: any }) => {
   return (
     <div style={{
-      width: '80px',
-      height: '40px',
+      width: '60px',
+      height: '60px',
       backgroundColor: '#10b981',
       border: '3px solid #059669',
-      borderRadius: '20px',
+      borderRadius: '50%',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       color: 'white',
-      fontWeight: '600',
-      fontSize: '14px',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+      fontWeight: '700',
+      fontSize: '24px',
+      boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
+      position: 'relative'
     }}>
-      🚀 Start
-      <Handle type="source" position={Position.Bottom} />
+      ▶
+      <Handle 
+        type="source" 
+        position={Position.Bottom}
+        style={{
+          backgroundColor: '#059669',
+          border: '2px solid white',
+          width: '12px',
+          height: '12px'
+        }}
+      />
+      {/* Start label */}
+      <div style={{
+        position: 'absolute',
+        bottom: '-25px',
+        fontSize: '11px',
+        fontWeight: '600',
+        color: '#059669',
+        whiteSpace: 'nowrap'
+      }}>
+        START
+      </div>
     </div>
   );
 };
@@ -312,26 +421,62 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
         }
       });
 
-      // Connect nodes with improved logic
+      // Connect nodes with improved BPMN-compliant logic
       if (currentBranch === 'if' && gatewayNodeId && yPosition === branchStartY) {
-        // First node in IF branch - connect from gateway
+        // First node in IF branch - connect from gateway with "Yes" label
         edges.push({
           id: `edge-${gatewayNodeId}-${nodeId}`,
           source: gatewayNodeId,
           target: nodeId,
-          label: 'Yes',
+          sourceHandle: 'bottom',
+          targetHandle: 'top',
+          label: '✓ Yes',
+          labelStyle: { 
+            fill: '#059669', 
+            fontWeight: 600, 
+            fontSize: '12px',
+            backgroundColor: 'white',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            border: '1px solid #059669'
+          },
+          labelBgPadding: [8, 4],
+          labelBgBorderRadius: 4,
+          labelBgStyle: { fill: 'white', fillOpacity: 0.9 },
           animated: true,
-          style: { stroke: '#10b981' }
+          style: { 
+            stroke: '#059669', 
+            strokeWidth: 2,
+            strokeDasharray: '0'
+          }
         });
       } else if (currentBranch === 'otherwise' && gatewayNodeId && yPosition === branchStartY) {
-        // First node in OTHERWISE branch - connect from gateway
+        // First node in OTHERWISE branch - connect from gateway with "No" label  
         edges.push({
           id: `edge-${gatewayNodeId}-${nodeId}`,
           source: gatewayNodeId,
           target: nodeId,
-          label: 'No',
+          sourceHandle: 'right',
+          targetHandle: 'top',
+          label: '✗ No',
+          labelStyle: { 
+            fill: '#dc2626', 
+            fontWeight: 600, 
+            fontSize: '12px',
+            backgroundColor: 'white',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            border: '1px solid #dc2626'
+          },
+          labelBgPadding: [8, 4],
+          labelBgBorderRadius: 4,
+          labelBgStyle: { fill: 'white', fillOpacity: 0.9 },
           animated: true,
-          style: { stroke: '#ef4444' }
+          style: { 
+            stroke: '#dc2626', 
+            strokeWidth: 2,
+            strokeDasharray: '0'
+          }
         });
       } else if (previousNodeId && 
                  (currentBranch === 'main' || 
@@ -342,7 +487,11 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
           id: `edge-${previousNodeId}-${nodeId}`,
           source: previousNodeId,
           target: nodeId,
-          animated: true
+          animated: true,
+          style: { 
+            stroke: '#6b7280', 
+            strokeWidth: 2
+          }
         });
       }
 
