@@ -445,8 +445,7 @@ Otherwise
       fontFamily: 'system-ui, sans-serif',
       display: 'flex',
       flexDirection: 'column',
-      overflow: 'hidden',
-      backgroundColor: '#f8fafc'
+      overflow: 'hidden'
     }}>
       {/* Header Bar */}
       <div style={{ 

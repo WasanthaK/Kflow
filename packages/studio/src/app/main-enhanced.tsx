@@ -303,6 +303,7 @@ Otherwise
   const [suggestions, setSuggestions] = useState<AutocompleteSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [graphFullscreen, setGraphFullscreen] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(40); // Left panel width percentage
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleConvert = useCallback(async () => {
@@ -449,68 +450,90 @@ Otherwise
       backgroundColor: '#f8fafc'
     }}>
       {/* Header Bar */}
-      <div style={{ 
+      <header style={{ 
         display: 'flex', 
         alignItems: 'center', 
         justifyContent: 'space-between', 
         padding: '12px 20px',
-        backgroundColor: '#f8fafc',
+        backgroundColor: 'white',
         borderBottom: '2px solid #e2e8f0',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
         flexShrink: 0,
-        minHeight: '60px'
+        minHeight: '60px',
+        zIndex: 100
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <h1 style={{ margin: 0, color: '#2563eb', fontSize: '1.5rem' }}>🔄 Kflow Studio</h1>
+          <h1 style={{ margin: 0, color: '#2563eb', fontSize: '1.5rem', fontWeight: '700' }}>🔄 Kflow Studio</h1>
           <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', gap: '6px' }}>
-            <span style={{ backgroundColor: '#f3f4f6', padding: '3px 6px', borderRadius: '3px' }}>
-              📊 Visual
+            <span style={{ backgroundColor: '#e0f2fe', color: '#0277bd', padding: '3px 6px', borderRadius: '3px', fontWeight: '500' }}>
+              📊 Visual Graphs
             </span>
-            <span style={{ backgroundColor: '#f3f4f6', padding: '3px 6px', borderRadius: '3px' }}>
-              🏗️ BPMN
+            <span style={{ backgroundColor: '#e8f5e8', color: '#2e7d32', padding: '3px 6px', borderRadius: '3px', fontWeight: '500' }}>
+              🏗️ BPMN 2.0
             </span>
-            <span style={{ backgroundColor: '#f3f4f6', padding: '3px 6px', borderRadius: '3px' }}>
+            <span style={{ backgroundColor: '#fff3e0', color: '#f57c00', padding: '3px 6px', borderRadius: '3px', fontWeight: '500' }}>
               ⚡ Real-time
             </span>
             <span style={{ 
-              backgroundColor: aiEnabled ? '#dcfce7' : '#fef2f2', 
-              color: aiEnabled ? '#16a34a' : '#dc2626',
+              backgroundColor: aiEnabled ? '#e8f5e8' : '#ffebee', 
+              color: aiEnabled ? '#2e7d32' : '#c62828',
               padding: '3px 6px', 
-              borderRadius: '3px' 
+              borderRadius: '3px',
+              fontWeight: '500'
             }}>
-              🤖 AI {aiEnabled ? 'ON' : 'OFF'}
+              🤖 AI {aiEnabled ? 'ACTIVE' : 'OFF'}
             </span>
           </div>
         </div>
         
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button
             onClick={() => setShowAiSetup(!showAiSetup)}
             style={{
-              padding: '6px 10px',
-              backgroundColor: aiEnabled ? '#16a34a' : '#f59e0b',
+              padding: '8px 12px',
+              backgroundColor: aiEnabled ? '#2e7d32' : '#f57c00',
               color: 'white',
               border: 'none',
-              borderRadius: '4px',
-              fontSize: '11px',
+              borderRadius: '6px',
+              fontSize: '12px',
               cursor: 'pointer',
-              fontWeight: '600'
+              fontWeight: '600',
+              transition: 'all 0.2s'
             }}
           >
             🤖 {aiEnabled ? 'AI Ready' : 'Setup AI'}
           </button>
+          
+          <button
+            onClick={() => setGraphFullscreen(true)}
+            disabled={!showGraph}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: showGraph ? '#1976d2' : '#9e9e9e',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '12px',
+              cursor: showGraph ? 'pointer' : 'not-allowed',
+              fontWeight: '600'
+            }}
+          >
+            🖥️ Fullscreen
+          </button>
         </div>
-      </div>
+      </header>
 
       {/* AI Setup Panel */}
       {showAiSetup && (
         <div style={{
-          backgroundColor: '#f8fafc',
-          border: '2px solid #e2e8f0',
-          borderRadius: '8px',
+          backgroundColor: '#f0f9ff',
+          border: '2px solid #0ea5e9',
           padding: '20px',
-          marginBottom: '20px'
+          margin: '10px 20px',
+          borderRadius: '8px',
+          flexShrink: 0
         }}>
-          <h3 style={{ margin: '0 0 16px 0', color: '#1f2937' }}>🤖 AI Autocomplete Setup</h3>
+          <h3 style={{ margin: '0 0 16px 0', color: '#1e40af' }}>🤖 AI Autocomplete Setup</h3>
           <p style={{ color: '#6b7280', marginBottom: '16px', lineHeight: '1.5' }}>
             Enable AI-powered autocomplete with your OpenAI API key. Press <strong>Tab</strong> in the editor for smart suggestions.
           </p>
@@ -518,29 +541,33 @@ Otherwise
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px' }}>
             <input
               type="password"
-              placeholder="Enter your OpenAI API key"
+              placeholder="Enter your OpenAI API key (sk-...)"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               style={{
                 flex: 1,
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '4px',
-                fontSize: '14px'
+                padding: '10px 12px',
+                border: '2px solid #e2e8f0',
+                borderRadius: '6px',
+                fontSize: '14px',
+                outline: 'none',
+                transition: 'border-color 0.2s'
               }}
+              onFocus={(e) => e.target.style.borderColor = '#0ea5e9'}
+              onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
             />
             <button
               onClick={handleApiKeySetup}
               disabled={!apiKey.trim()}
               style={{
-                padding: '8px 16px',
-                backgroundColor: '#059669',
+                padding: '10px 20px',
+                backgroundColor: apiKey.trim() ? '#059669' : '#9ca3af',
                 color: 'white',
                 border: 'none',
-                borderRadius: '4px',
+                borderRadius: '6px',
                 cursor: apiKey.trim() ? 'pointer' : 'not-allowed',
                 fontWeight: '600',
-                opacity: apiKey.trim() ? 1 : 0.5
+                fontSize: '14px'
               }}
             >
               Activate AI
@@ -549,13 +576,14 @@ Otherwise
               <button
                 onClick={handleClearApiKey}
                 style={{
-                  padding: '8px 16px',
+                  padding: '10px 20px',
                   backgroundColor: '#dc2626',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '4px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
-                  fontWeight: '600'
+                  fontWeight: '600',
+                  fontSize: '14px'
                 }}
               >
                 Clear Key
@@ -564,8 +592,8 @@ Otherwise
           </div>
           
           <div style={{ fontSize: '12px', color: '#6b7280' }}>
-            Your API key is stored locally and never sent to our servers. 
-            {aiEnabled && <span style={{ color: '#16a34a', fontWeight: '600' }}> ✅ AI is active - press Tab for suggestions!</span>}
+            🔒 Your API key is stored locally and never sent to our servers. 
+            {aiEnabled && <span style={{ color: '#059669', fontWeight: '600' }}> ✅ AI is active - press Tab for suggestions!</span>}
           </div>
         </div>
       )}
@@ -575,28 +603,44 @@ Otherwise
         flex: 1, 
         display: 'flex', 
         overflow: 'hidden',
-        minHeight: 0 
+        minHeight: 0,
+        position: 'relative'
       }}>
         {/* Left Panel - Story Editor */}
         <div style={{ 
-          width: showGraph ? '40%' : '100%',
+          width: showGraph ? `${panelWidth}%` : '100%',
           minWidth: '350px',
           display: 'flex',
           flexDirection: 'column',
+          backgroundColor: 'white',
           borderRight: showGraph ? '2px solid #e2e8f0' : 'none',
-          transition: 'width 0.3s ease'
+          transition: 'width 0.3s ease',
+          position: 'relative'
         }}>
+          {/* Editor Header */}
           <div style={{ 
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'space-between',
-            padding: '16px 20px 12px 20px',
-            backgroundColor: '#f9fafb',
+            padding: '12px 20px',
+            backgroundColor: '#f8fafc',
             borderBottom: '1px solid #e5e7eb',
             flexShrink: 0
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <label style={{ fontWeight: '600', fontSize: '16px', color: '#1f2937' }}>📝 StoryFlow Editor</label>
+              {converted && (
+                <span style={{ 
+                  fontSize: '12px', 
+                  color: '#059669',
+                  backgroundColor: '#dcfce7',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  fontWeight: '500'
+                }}>
+                  ✓ Compiled
+                </span>
+              )}
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
@@ -614,26 +658,18 @@ Otherwise
               >
                 {showGraph ? '📊 Hide Graph' : '📊 Show Graph'}
               </button>
-              <button
-                onClick={() => setGraphFullscreen(!graphFullscreen)}
-                disabled={!showGraph}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: showGraph ? '#3b82f6' : '#9ca3af',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  cursor: showGraph ? 'pointer' : 'not-allowed',
-                  fontWeight: '500'
-                }}
-              >
-                🖥️ Fullscreen
-              </button>
             </div>
           </div>
-          
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px', minHeight: 0 }}>
+
+          {/* Editor Content */}
+          <div style={{ 
+            flex: 1, 
+            display: 'flex', 
+            flexDirection: 'column', 
+            padding: '20px',
+            minHeight: 0,
+            position: 'relative'
+          }}>
             <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
               <textarea 
                 ref={textareaRef}
@@ -643,23 +679,36 @@ Otherwise
                 style={{ 
                   width: '100%', 
                   flex: 1,
-                  minHeight: '300px',
-                  fontFamily: 'Monaco, Consolas, monospace',
+                  minHeight: '400px',
+                  fontFamily: 'JetBrains Mono, Monaco, Consolas, monospace',
                   fontSize: '14px',
-                  padding: '15px',
+                  padding: '20px',
                   border: `2px solid ${aiEnabled ? '#10b981' : '#e5e7eb'}`,
                   borderRadius: '8px',
                   resize: 'none',
-                  lineHeight: '1.5',
-                  backgroundColor: aiEnabled ? '#f0fdf4' : 'white',
-                  outline: 'none'
+                  lineHeight: '1.6',
+                  backgroundColor: aiEnabled ? '#f0fdf4' : '#fafafa',
+                  outline: 'none',
+                  transition: 'border-color 0.2s, background-color 0.2s'
                 }}
                 placeholder={aiEnabled ? 
-                  "Enter your StoryFlow here... (Press Tab for AI suggestions)" : 
+                  "Enter your StoryFlow here... 🤖 Press Tab for AI suggestions" : 
                   "Enter your StoryFlow here..."
                 }
+                onFocus={(e) => {
+                  if (aiEnabled) {
+                    e.target.style.borderColor = '#10b981';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(16, 185, 129, 0.1)';
+                  } else {
+                    e.target.style.borderColor = '#3b82f6';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                  }
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = aiEnabled ? '#10b981' : '#e5e7eb';
+                  e.target.style.boxShadow = 'none';
+                }}
               />
-            
               
               {aiEnabled && (
                 <div style={{
@@ -668,114 +717,208 @@ Otherwise
                   right: '15px',
                   backgroundColor: '#10b981',
                   color: 'white',
-                  padding: '2px 6px',
-                  borderRadius: '3px',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
                   fontSize: '10px',
-                  fontWeight: '600'
+                  fontWeight: '600',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}>
-                  AI ON
+                  AI ACTIVE
                 </div>
-              )}            {/* AI Suggestions Dropdown */}
-            {showSuggestions && suggestions.length > 0 && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                right: 0,
-                backgroundColor: 'white',
-                border: '2px solid #10b981',
-                borderRadius: '8px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                zIndex: 1000,
-                maxHeight: '200px',
-                overflowY: 'auto'
-              }}>
-                <div style={{ padding: '8px', backgroundColor: '#f0fdf4', fontSize: '12px', fontWeight: '600', color: '#059669' }}>
-                  🤖 AI Suggestions (Click to apply):
-                </div>
-                {suggestions.map((suggestion, index) => (
-                  <div
-                    key={index}
-                    onClick={() => applySuggestion(suggestion)}
-                    style={{
-                      padding: '12px',
-                      borderBottom: index < suggestions.length - 1 ? '1px solid #e5e7eb' : 'none',
-                      cursor: 'pointer',
-                      backgroundColor: 'white'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                  >
-                    <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '4px' }}>
-                      {suggestion.text}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#6b7280' }}>
-                      {suggestion.type} • {Math.round(suggestion.confidence * 100)}% confidence
-                      {suggestion.description && ` • ${suggestion.description}`}
-                    </div>
+              )}
+              
+              {/* AI Suggestions Dropdown */}
+              {showSuggestions && suggestions.length > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  backgroundColor: 'white',
+                  border: '2px solid #10b981',
+                  borderRadius: '8px',
+                  boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+                  zIndex: 1000,
+                  maxHeight: '250px',
+                  overflowY: 'auto',
+                  marginTop: '4px'
+                }}>
+                  <div style={{ 
+                    padding: '12px 16px', 
+                    backgroundColor: '#f0fdf4', 
+                    fontSize: '12px', 
+                    fontWeight: '600', 
+                    color: '#059669',
+                    borderBottom: '1px solid #d1fae5'
+                  }}>
+                    🤖 AI Suggestions - Click to apply:
                   </div>
-                ))}
+                  {suggestions.map((suggestion, index) => (
+                    <div
+                      key={index}
+                      onClick={() => applySuggestion(suggestion)}
+                      style={{
+                        padding: '14px 16px',
+                        borderBottom: index < suggestions.length - 1 ? '1px solid #f3f4f6' : 'none',
+                        cursor: 'pointer',
+                        backgroundColor: 'white',
+                        transition: 'background-color 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                    >
+                      <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '4px', color: '#1f2937' }}>
+                        {suggestion.text}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#6b7280' }}>
+                        <span style={{ 
+                          backgroundColor: '#e5e7eb', 
+                          padding: '2px 6px', 
+                          borderRadius: '3px', 
+                          marginRight: '8px',
+                          textTransform: 'capitalize'
+                        }}>
+                          {suggestion.type}
+                        </span>
+                        {Math.round(suggestion.confidence * 100)}% confidence
+                        {suggestion.description && ` • ${suggestion.description}`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Editor Controls */}
+            <div style={{ marginTop: '16px', display: 'flex', gap: '12px', flexShrink: 0 }}>
+              <button 
+                type="button" 
+                onClick={handleConvert} 
+                disabled={isConverting}
+                style={{ 
+                  padding: '12px 24px',
+                  backgroundColor: isConverting ? '#9ca3af' : '#2563eb',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontWeight: '600',
+                  cursor: isConverting ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                {isConverting ? '⏳ Converting...' : '🔄 Convert & Visualize'}
+              </button>
+              
+              <button 
+                type="button" 
+                onClick={() => setAssistVisible(!assistVisible)}
+                style={{ 
+                  padding: '12px 24px',
+                  backgroundColor: assistVisible ? '#7c3aed' : '#6b7280',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                {assistVisible ? '🔍 Hide Info' : '💡 Show Info'}
+              </button>
+            </div>
+
+            {error && (
+              <div style={{ 
+                color: '#dc2626', 
+                backgroundColor: '#fef2f2',
+                border: '2px solid #fca5a5',
+                padding: '12px 16px',
+                borderRadius: '6px',
+                marginTop: '16px',
+                fontSize: '14px'
+              }}>
+                ❌ <strong>Error:</strong> {error}
               </div>
             )}
           </div>
-
-          <div style={{ marginTop: '16px', display: 'flex', gap: '12px' }}>
-            <button 
-              type="button" 
-              onClick={handleConvert} 
-              disabled={isConverting}
-              style={{ 
-                padding: '12px 20px',
-                backgroundColor: '#2563eb',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: '600',
-                cursor: isConverting ? 'not-allowed' : 'pointer',
-                opacity: isConverting ? 0.6 : 1
-              }}
-            >
-              {isConverting ? '⏳ Converting...' : '🔄 Convert'}
-            </button>
-            
-            <button 
-              type="button" 
-              onClick={() => setAssistVisible(!assistVisible)}
-              style={{ 
-                padding: '12px 20px',
-                backgroundColor: '#7c3aed',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: '600',
-                cursor: 'pointer'
-              }}
-            >
-              {assistVisible ? '🔍 Hide Info' : '💡 Show Info'}
-            </button>
-          </div>
-
-          {error && (
-            <div style={{ 
-              color: '#dc2626', 
-              backgroundColor: '#fef2f2',
-              border: '1px solid #fecaca',
-              padding: '12px',
-              borderRadius: '6px',
-              marginTop: '16px'
-            }}>
-              ❌ Error: {error}
-            </div>
-          )}
         </div>
+
+        {/* Resizer */}
+        {showGraph && (
+          <div 
+            style={{
+              width: '4px',
+              backgroundColor: '#e2e8f0',
+              cursor: 'col-resize',
+              position: 'relative',
+              flexShrink: 0,
+              transition: 'background-color 0.2s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#e2e8f0'}
+            onMouseDown={(e) => {
+              const startX = e.clientX;
+              const startWidth = panelWidth;
+              
+              const handleMouseMove = (e: MouseEvent) => {
+                const deltaX = e.clientX - startX;
+                const containerWidth = window.innerWidth;
+                const newWidth = Math.max(25, Math.min(75, startWidth + (deltaX / containerWidth) * 100));
+                setPanelWidth(newWidth);
+              };
+              
+              const handleMouseUp = () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+              };
+              
+              document.addEventListener('mousemove', handleMouseMove);
+              document.addEventListener('mouseup', handleMouseUp);
+            }}
+          >
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '20px',
+              height: '40px',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: 0
+            }}>
+              ⋮⋮
+            </div>
+          </div>
+        )}
 
         {/* Right Panel - Visual Graph */}
         {showGraph && (
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontWeight: '600', fontSize: '16px' }}>📊 Visual Workflow Graph:</h3>
+          <div style={{ 
+            flex: 1,
+            minWidth: '400px',
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: '#fafafa'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between', 
+              padding: '12px 20px',
+              backgroundColor: '#f8fafc',
+              borderBottom: '1px solid #e5e7eb',
+              flexShrink: 0
+            }}>
+              <h3 style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: '#1f2937' }}>
+                📊 Visual Workflow Graph
+              </h3>
               <button
-                onClick={() => setGraphFullscreen(!graphFullscreen)}
+                onClick={() => setGraphFullscreen(true)}
                 style={{
                   padding: '6px 12px',
                   backgroundColor: '#3b82f6',
@@ -787,28 +930,24 @@ Otherwise
                   fontWeight: '600'
                 }}
               >
-                {graphFullscreen ? '📱 Exit Fullscreen' : '🖥️ Fullscreen'}
+                🖥️ Fullscreen
               </button>
             </div>
+            
             <div style={{ 
-              border: '2px solid #e5e7eb', 
-              borderRadius: '8px', 
-              height: '500px',
-              backgroundColor: '#fafafa',
-              overflow: 'hidden'
+              flex: 1,
+              border: 'none',
+              backgroundColor: '#ffffff',
+              overflow: 'hidden',
+              position: 'relative'
             }}>
               <WorkflowGraph workflowData={(() => {
                 try {
-                  if (!converted) {
-                    console.log('No converted data available');
-                    return null;
-                  }
+                  if (!converted) return null;
                   const parsed = JSON.parse(converted);
-                  console.log('Parsed workflow data:', parsed);
                   return parsed;
                 } catch (error) {
                   console.error('Failed to parse workflow data:', error);
-                  console.log('Raw converted data:', converted);
                   return null;
                 }
               })()} />
@@ -834,28 +973,51 @@ Otherwise
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '16px 20px',
+            padding: '16px 24px',
             borderBottom: '2px solid #e5e7eb',
-            backgroundColor: '#f9fafb'
+            backgroundColor: '#f8fafc'
           }}>
-            <h2 style={{ margin: 0, color: '#1f2937', fontSize: '20px' }}>
+            <h2 style={{ margin: 0, color: '#1f2937', fontSize: '24px', fontWeight: '700' }}>
               📊 {converted ? JSON.parse(converted).flow : 'Workflow Graph'} - Fullscreen View
             </h2>
-            <button
-              onClick={() => setGraphFullscreen(false)}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#dc2626',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '14px',
-                cursor: 'pointer',
-                fontWeight: '600'
-              }}
-            >
-              ✕ Close Fullscreen
-            </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => {
+                  if (document.fullscreenElement) {
+                    document.exitFullscreen();
+                  } else {
+                    document.documentElement.requestFullscreen();
+                  }
+                }}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#6366f1',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                🌐 Browser Fullscreen
+              </button>
+              <button
+                onClick={() => setGraphFullscreen(false)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#dc2626',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                ✕ Close
+              </button>
+            </div>
           </div>
           <div style={{ flex: 1, backgroundColor: '#fafafa' }}>
             <WorkflowGraph workflowData={(() => {
@@ -873,20 +1035,35 @@ Otherwise
 
       {/* Output Panel */}
       {converted && (
-        <div style={{ marginTop: '24px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
-            ✅ Enhanced SimpleScript Output:
-          </label>
+        <div style={{ 
+          backgroundColor: 'white',
+          borderTop: '2px solid #e2e8f0',
+          maxHeight: '300px',
+          overflow: 'hidden',
+          flexShrink: 0
+        }}>
+          <div style={{
+            padding: '12px 20px',
+            backgroundColor: '#f8fafc',
+            borderBottom: '1px solid #e5e7eb',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'between'
+          }}>
+            <label style={{ fontWeight: '600', fontSize: '14px', color: '#1f2937' }}>
+              ✅ Enhanced SimpleScript Output
+            </label>
+          </div>
           <pre style={{ 
-            backgroundColor: '#f8fafc', 
+            backgroundColor: '#fafafa', 
             padding: '20px', 
-            border: '2px solid #e2e8f0',
-            borderRadius: '8px',
+            margin: 0,
             whiteSpace: 'pre-wrap',
-            fontSize: '13px',
+            fontSize: '12px',
             lineHeight: '1.4',
             overflow: 'auto',
-            maxHeight: '300px'
+            maxHeight: '250px',
+            fontFamily: 'JetBrains Mono, Monaco, Consolas, monospace'
           }}>
             {converted}
           </pre>
@@ -895,11 +1072,18 @@ Otherwise
 
       {/* Info Panel */}
       {assistVisible && (
-        <div style={{ marginTop: '24px' }}>
+        <div style={{ 
+          backgroundColor: 'white',
+          borderTop: '2px solid #e2e8f0',
+          padding: '20px',
+          maxHeight: '400px',
+          overflow: 'auto',
+          flexShrink: 0
+        }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
             <div>
-              <h3 style={{ color: '#7c3aed', marginBottom: '12px' }}>🤖 AI Features:</h3>
-              <ul style={{ lineHeight: '1.6', color: '#374151' }}>
+              <h3 style={{ color: '#7c3aed', marginBottom: '12px', fontSize: '16px' }}>🤖 AI Features:</h3>
+              <ul style={{ lineHeight: '1.6', color: '#374151', margin: 0, paddingLeft: '20px' }}>
                 <li>🧠 <strong>Smart Autocomplete</strong>: {aiEnabled ? 'Press Tab for suggestions' : 'Setup API key to enable'}</li>
                 <li>🎯 <strong>Context Awareness</strong>: Domain-specific suggestions</li>
                 <li>📝 <strong>Pattern Recognition</strong>: Smart workflow templates</li>
@@ -909,8 +1093,8 @@ Otherwise
             </div>
             
             <div>
-              <h3 style={{ color: '#059669', marginBottom: '12px' }}>✅ Visual Features:</h3>
-              <ul style={{ lineHeight: '1.6', color: '#374151' }}>
+              <h3 style={{ color: '#059669', marginBottom: '12px', fontSize: '16px' }}>✅ Visual Features:</h3>
+              <ul style={{ lineHeight: '1.6', color: '#374151', margin: 0, paddingLeft: '20px' }}>
                 <li>📊 <strong>Interactive Graph</strong>: ReactFlow-powered diagrams</li>
                 <li>🎯 <strong>BPMN Elements</strong>: Industry-standard notation</li>
                 <li>🔄 <strong>Real-time Updates</strong>: Graph syncs as you type</li>
@@ -920,36 +1104,25 @@ Otherwise
             </div>
 
             <div>
-              <h3 style={{ color: '#dc2626', marginBottom: '12px' }}>🎯 Enhanced BPMN Tasks:</h3>
-              <ul style={{ lineHeight: '1.6', color: '#374151' }}>
-                <li>� <strong>User Tasks</strong>: Human interactions (blue)</li>
+              <h3 style={{ color: '#dc2626', marginBottom: '12px', fontSize: '16px' }}>🎯 Enhanced BPMN Tasks:</h3>
+              <ul style={{ lineHeight: '1.6', color: '#374151', margin: 0, paddingLeft: '20px' }}>
+                <li>👤 <strong>User Tasks</strong>: Human interactions (blue)</li>
                 <li>⚙️ <strong>Service Tasks</strong>: System operations (green)</li>
                 <li>🧮 <strong>Script Tasks</strong>: Calculations & processing (purple)</li>
-                <li>� <strong>Business Rule Tasks</strong>: Decision logic (orange)</li>
+                <li>📋 <strong>Business Rule Tasks</strong>: Decision logic (orange)</li>
                 <li>📧 <strong>Message Tasks</strong>: Communications (red)</li>
                 <li>⏳ <strong>Wait Tasks</strong>: Timer events (gray)</li>
               </ul>
             </div>
             
             <div>
-              <h3 style={{ color: '#f59e0b', marginBottom: '12px' }}>🔧 Advanced Features:</h3>
-              <ul style={{ lineHeight: '1.6', color: '#374151' }}>
-                <li>🏷️ <strong>Branch Labeling</strong>: Clear decision paths</li>
-                <li>� <strong>Variable Extraction</strong>: Auto-detect {`{variables}`}</li>
-                <li>🎭 <strong>Actor Recognition</strong>: Identify workflow roles</li>
-                <li>🧮 <strong>Script Classification</strong>: 6+ calculation subtypes</li>
-                <li>💾 <strong>Template Conversion</strong>: Smart parameterization</li>
-              </ul>
-            </div>
-          </div>
-
-          <div style={{ marginTop: '20px' }}>
-            <h3 style={{ color: '#6b7280', marginBottom: '12px' }}>📋 Workflow Guidelines:</h3>
-            <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-              <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6', color: '#4b5563' }}>
-                {guardrails.map(rule => (
-                  <li key={rule} style={{ marginBottom: '4px' }}>{rule}</li>
-                ))}
+              <h3 style={{ color: '#f59e0b', marginBottom: '12px', fontSize: '16px' }}>🔧 Layout Features:</h3>
+              <ul style={{ lineHeight: '1.6', color: '#374151', margin: 0, paddingLeft: '20px' }}>
+                <li>↔️ <strong>Resizable Panels</strong>: Drag to adjust editor/graph size</li>
+                <li>🖥️ <strong>Fullscreen Mode</strong>: Dedicated graph view</li>
+                <li>🎛️ <strong>Multi-Monitor</strong>: Optimized for dual screens</li>
+                <li>📱 <strong>Responsive Design</strong>: Works on all screen sizes</li>
+                <li>⚡ <strong>Real-time Sync</strong>: Instant visual updates</li>
               </ul>
             </div>
           </div>

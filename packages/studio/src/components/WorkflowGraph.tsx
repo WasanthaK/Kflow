@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useEffect } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -637,6 +637,12 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
+  // Update nodes and edges when workflowData changes
+  useEffect(() => {
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
+
   const onConnect = useCallback(
     (params: any) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
@@ -665,7 +671,13 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
   }
 
   return (
-    <div style={{ height: '100%', minHeight: '500px', width: '100%' }}>
+    <div style={{ 
+      height: '100%', 
+      minHeight: '500px', 
+      width: '100%',
+      position: 'relative',
+      backgroundColor: '#fafafa'
+    }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -675,13 +687,13 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{
-          padding: 0.1,
+          padding: 0.2,
           includeHiddenNodes: false,
-          minZoom: 0.1,
-          maxZoom: 2
+          minZoom: 0.5,
+          maxZoom: 1.5
         }}
         attributionPosition="bottom-left"
-        defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+        defaultViewport={{ x: 0, y: 0, zoom: 0.9 }}
       >
         <Controls position="top-right" />
         <MiniMap 
