@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import yaml from 'yaml';
-import Ajv from 'ajv';
+import Ajv2020 from 'ajv/dist/2020';
 import schema from '../schemas/simplescript.schema.json';
 
 export type SimpleScript = any; // replace with generated types
 
-const ajv = new Ajv({ allErrors: true, strict: false });
+const ajv = new Ajv2020({ allErrors: true, strict: false });
 const validate = ajv.compile(schema as any);
 
 export function parseSimpleScript(input: string): { doc: SimpleScript; errors: string[] } {
