@@ -60,25 +60,29 @@ az staticwebapp create \
 
 ### 2. **Configure GitHub Secrets**
 
-After creating the Static Web App, Azure will automatically:
-- Add the workflow file (already present)
-- Create a deployment token
+The GitHub Actions workflow is already configured in `.github/workflows/azure-static-web-apps.yml` with:
+- ✅ **Node.js 18** and **PNPM 8** setup
+- ✅ **Sequential package building** (language → studio)
+- ✅ **Proper Azure deployment** configuration
 
-**Manually add the secret:**
+**Add the deployment secret:**
 1. Go to your GitHub repository: `https://github.com/WasanthaK/Kflow`
-2. Click **Settings** → **Actions** → **Secrets and variables**
+2. Click **Settings** → **Secrets and variables** → **Actions**
 3. Click **"New repository secret"**
 4. Name: `AZURE_STATIC_WEB_APPS_API_TOKEN`
 5. Value: Copy from Azure Portal → Static Web App → **"Manage deployment token"**
+
+**Note**: Do NOT use Azure's auto-generated workflow file - we have a custom one optimized for PNPM and monorepo structure.
 
 ### 3. **Deploy Automatically**
 
 The deployment is now automated! Every push to `main` will:
 
 ```yaml
-✅ Install dependencies with PNPM
-✅ Build @kflow/language package  
-✅ Build @kflow/studio production bundle
+✅ Setup Node.js 18 and PNPM 8
+✅ Install dependencies with frozen lockfile
+✅ Build @kflow/language package (TypeScript compilation)  
+✅ Build @kflow/studio production bundle (React + Vite)
 ✅ Deploy to Azure Static Web Apps
 ✅ Provide global CDN distribution
 ✅ Enable custom domains (if configured)
@@ -102,24 +106,33 @@ export default defineConfig({
   plugins: [react()],
   server: { port: 5173 },
   build: {
-    target: 'es2015',
-    outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          reactflow: ['reactflow']
+        }
+      }
+    },
     sourcemap: false,
     minify: 'esbuild',
-    chunkSizeWarningLimit: 1000,
+    target: 'es2020'
   },
-  define: {
-    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  base: './',
+  esbuild: {
+    drop: ['console', 'debugger']
   }
 });
 ```
 
 ### **Production Optimizations**
 - ⚡ **ESBuild minification** for faster builds
-- 📦 **Code splitting** for optimal loading
-- 🗜️ **Gzip compression** via Azure CDN
+- 📦 **Manual chunk splitting** - React/ReactFlow separated for optimal loading
+- �️ **Console/debugger removal** in production builds
+- �🗜️ **Gzip compression** via Azure CDN
 - 🌐 **Global CDN** for worldwide performance
 - 📱 **Responsive design** for all devices
+- 🎯 **ES2020 target** for modern browser optimization
 
 ## 🎯 Deployment Features
 
@@ -155,11 +168,14 @@ Add to `packages/studio/index.html`:
 
 #### Build Fails
 ```bash
-# Check locally first
+# Check locally first (use exact same commands as CI/CD)
 cd /workspaces/Kflow
-pnpm install
+pnpm install --frozen-lockfile
 pnpm --filter @kflow/language build
 pnpm --filter @kflow/studio build
+
+# Verify output directory exists
+ls -la packages/studio/dist/
 ```
 
 #### Deployment Token Issues
@@ -180,10 +196,11 @@ pnpm --filter @kflow/studio build
 ## 📈 Performance Metrics
 
 **Expected Performance:**
-- ⚡ **Build Time**: 2-3 minutes
+- ⚡ **Build Time**: 2-3 minutes (includes TypeScript compilation)
 - 🌐 **Global Load Time**: < 2 seconds
-- 📦 **Bundle Size**: ~350KB gzipped
+- 📦 **Bundle Size**: ~350KB gzipped (vendor chunks separate for caching)
 - 🎯 **Lighthouse Score**: 95+ performance
+- 🚀 **First Contentful Paint**: < 1.5 seconds
 
 ## 🎉 Go Live Checklist
 

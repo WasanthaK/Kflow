@@ -11,6 +11,7 @@ import {
   Edge,
   Handle,
   Position,
+  ConnectionLineType
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -112,14 +113,71 @@ const TaskNode = ({ data }: { data: any }) => {
           {data.subtype.replace(/_/g, ' ')}
         </div>
       )}
+      {/* Multi-directional handles for flexible flow layouts */}
+      
+      {/* Input handles */}
       <Handle 
-        type="source" 
-        position={Position.Bottom}
+        type="target" 
+        position={Position.Top}
+        id="top-in"
         style={{
+          top: '-6px',
+          left: '50%',
+          transform: 'translateX(-50%)',
           backgroundColor: getTaskColor(data.taskType),
           border: '2px solid white',
           width: '10px',
-          height: '10px'
+          height: '10px',
+          borderRadius: '50%'
+        }}
+      />
+      
+      <Handle 
+        type="target" 
+        position={Position.Left}
+        id="left-in"
+        style={{
+          left: '-6px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          backgroundColor: getTaskColor(data.taskType),
+          border: '2px solid white',
+          width: '10px',
+          height: '10px',
+          borderRadius: '50%'
+        }}
+      />
+      
+      {/* Output handles */}
+      <Handle 
+        type="source" 
+        position={Position.Bottom}
+        id="bottom-out"
+        style={{
+          bottom: '-6px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: getTaskColor(data.taskType),
+          border: '2px solid white',
+          width: '10px',
+          height: '10px',
+          borderRadius: '50%'
+        }}
+      />
+      
+      <Handle 
+        type="source" 
+        position={Position.Right}
+        id="right-out"
+        style={{
+          right: '-6px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          backgroundColor: getTaskColor(data.taskType),
+          border: '2px solid white',
+          width: '10px',
+          height: '10px',
+          borderRadius: '50%'
         }}
       />
     </div>
@@ -257,54 +315,80 @@ const GatewayNode = ({ data }: { data: any }) => {
         }} 
       />
       
-      {/* Bottom handle (always present) */}
+      {/* Enhanced gateway handles for better flow control */}
+      
+      {/* Left handle - "Yes/True" branch for XOR, primary output for others */}
       <Handle 
         type="source" 
-        position={Position.Bottom} 
-        id="bottom"
+        position={Position.Left} 
+        id="left"
         style={{ 
-          bottom: '-5px',
-          left: '50%', 
-          transform: 'translateX(-50%)',
+          left: '-8px',
+          top: '50%',
+          transform: 'translateY(-50%)',
           backgroundColor: gatewayType === 'exclusive' ? '#059669' : config.color,
-          border: '2px solid white',
-          width: '10px',
-          height: '10px'
+          border: '3px solid white',
+          width: '12px',
+          height: '12px',
+          borderRadius: '50%',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
         }} 
       />
       
-      {/* Right handle (conditional) */}
-      {config.handles.includes('right') && (
+      {/* Right handle - "No/False" branch for XOR, secondary output for others */}
+      <Handle 
+        type="source" 
+        position={Position.Right} 
+        id="right"
+        style={{ 
+          right: '-8px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          backgroundColor: gatewayType === 'exclusive' ? '#dc2626' : config.color,
+          border: '3px solid white',
+          width: '12px',
+          height: '12px',
+          borderRadius: '50%',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+        }} 
+      />
+      
+      {/* Bottom handle - Additional output for parallel/inclusive gateways */}
+      {(gatewayType === 'parallel' || gatewayType === 'inclusive' || gatewayType === 'complex') && (
         <Handle 
           type="source" 
-          position={Position.Right} 
-          id="right"
+          position={Position.Bottom} 
+          id="bottom"
           style={{ 
-            right: '-5px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            backgroundColor: gatewayType === 'exclusive' ? '#dc2626' : config.color,
-            border: '2px solid white',
-            width: '10px',
-            height: '10px'
+            bottom: '-8px',
+            left: '50%', 
+            transform: 'translateX(-50%)',
+            backgroundColor: config.color,
+            border: '3px solid white',
+            width: '12px',
+            height: '12px',
+            borderRadius: '50%',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
           }} 
         />
       )}
       
-      {/* Left handle (for parallel/inclusive/complex/event gateways) */}
-      {config.handles.includes('left') && (
+      {/* Top handle - Additional output for event gateways */}
+      {gatewayType === 'event' && (
         <Handle 
           type="source" 
-          position={Position.Left} 
-          id="left"
+          position={Position.Top} 
+          id="top-out"
           style={{ 
-            left: '-5px',
-            top: '50%',
-            transform: 'translateY(-50%)',
+            top: '-8px',
+            left: '50%',
+            transform: 'translateX(-50%)',
             backgroundColor: config.color,
-            border: '2px solid white',
-            width: '10px',
-            height: '10px'
+            border: '3px solid white',
+            width: '12px',
+            height: '12px',
+            borderRadius: '50%',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
           }} 
         />
       )}
@@ -330,14 +414,38 @@ const StartNode = ({ data }: { data: any }) => {
       position: 'relative'
     }}>
       ▶
+      {/* Multiple output handles for flexible start connections */}
       <Handle 
         type="source" 
         position={Position.Bottom}
+        id="bottom-out"
         style={{
+          bottom: '-8px',
+          left: '50%',
+          transform: 'translateX(-50%)',
           backgroundColor: '#059669',
-          border: '2px solid white',
+          border: '3px solid white',
           width: '12px',
-          height: '12px'
+          height: '12px',
+          borderRadius: '50%',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+        }}
+      />
+      
+      <Handle 
+        type="source" 
+        position={Position.Right}
+        id="right-out"
+        style={{
+          right: '-8px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          backgroundColor: '#059669',
+          border: '3px solid white',
+          width: '12px',
+          height: '12px',
+          borderRadius: '50%',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
         }}
       />
       {/* Start label */}
@@ -374,69 +482,83 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
     const nodes: Node[] = [];
     const edges: Edge[] = [];
     
-    // Enhanced layout configuration with better spacing
+    // Enhanced layout system with improved connection points
     const centerX = 500;
-    const minNodeSpacing = 180; // Increased from 100
-    const branchOffset = 400; // Increased from 300
-    const nodeWidth = 220; // Max node width
-    const nodeHeight = 80; // Approximate node height
+    const minNodeSpacing = 180;
+    const branchOffset = 400; // Reduced for better symmetry
+    const nodeWidth = 240;
+    const nodeHeight = 100;
     let yPosition = 80;
     let nodeCounter = 0;
     
-    // Track occupied positions to prevent overlaps
-    const occupiedPositions: Array<{x: number, y: number, width: number, height: number}> = [];
+    // Track branch levels and positions
+    interface BranchLayout {
+      ifNodes: Array<{id: string, y: number}>;
+      otherwiseNodes: Array<{id: string, y: number}>;
+      maxY: number;
+      gatewayY: number;
+    }
     
-    // Function to check if a position is free
-    const isPositionFree = (x: number, y: number, width: number = nodeWidth, height: number = nodeHeight) => {
-      const buffer = 40; // Extra buffer space
-      return !occupiedPositions.some(pos => 
-        x < pos.x + pos.width + buffer &&
-        x + width + buffer > pos.x &&
-        y < pos.y + pos.height + buffer &&
-        y + height + buffer > pos.y
-      );
+    const branchLayouts: Map<string, BranchLayout> = new Map();
+    let currentBranchLayout: BranchLayout | null = null;
+    
+    // Function to start a new branch layout
+    const startBranchLayout = (gatewayId: string, gatewayY: number) => {
+      const layout: BranchLayout = {
+        ifNodes: [],
+        otherwiseNodes: [],
+        maxY: gatewayY,
+        gatewayY
+      };
+      branchLayouts.set(gatewayId, layout);
+      currentBranchLayout = layout;
     };
     
-    // Function to find next available position
-    const findAvailablePosition = (preferredX: number, preferredY: number, width: number = nodeWidth, height: number = nodeHeight) => {
-      let x = preferredX;
-      let y = preferredY;
-      let attempts = 0;
-      
-      while (!isPositionFree(x, y, width, height) && attempts < 50) {
-        if (attempts < 10) {
-          // Try moving right/left first
-          x = preferredX + (attempts % 2 === 0 ? 1 : -1) * Math.floor((attempts + 1) / 2) * 100;
-        } else if (attempts < 20) {
-          // Try moving down
-          y = preferredY + (attempts - 10) * 60;
-          x = preferredX;
+    // Function to add node to current branch
+    const addNodeToBranch = (nodeId: string, y: number, branch: 'if' | 'otherwise') => {
+      if (currentBranchLayout) {
+        if (branch === 'if') {
+          currentBranchLayout.ifNodes.push({id: nodeId, y});
         } else {
-          // Try diagonal positions
-          const offset = (attempts - 20) * 80;
-          x = preferredX + (attempts % 2 === 0 ? offset : -offset);
-          y = preferredY + offset;
+          currentBranchLayout.otherwiseNodes.push({id: nodeId, y});
         }
-        attempts++;
+        currentBranchLayout.maxY = Math.max(currentBranchLayout.maxY, y);
       }
-      
-      return { x, y };
     };
     
-    // Function to register occupied position
-    const registerPosition = (x: number, y: number, width: number = nodeWidth, height: number = nodeHeight) => {
-      occupiedPositions.push({ x, y, width, height });
+    // Function to balance branch heights
+    const balanceBranchHeights = () => {
+      branchLayouts.forEach(layout => {
+        const maxIfY = layout.ifNodes.length > 0 ? Math.max(...layout.ifNodes.map(n => n.y)) : layout.gatewayY;
+        const maxOtherwiseY = layout.otherwiseNodes.length > 0 ? Math.max(...layout.otherwiseNodes.map(n => n.y)) : layout.gatewayY;
+        const maxBranchY = Math.max(maxIfY, maxOtherwiseY);
+        
+        // Align branches to same levels where possible
+        const maxNodes = Math.max(layout.ifNodes.length, layout.otherwiseNodes.length);
+        
+        for (let i = 0; i < maxNodes; i++) {
+          const baseY = layout.gatewayY + minNodeSpacing + (i * minNodeSpacing);
+          
+          if (layout.ifNodes[i]) {
+            const node = nodes.find(n => n.id === layout.ifNodes[i].id);
+            if (node) node.position.y = baseY;
+          }
+          
+          if (layout.otherwiseNodes[i]) {
+            const node = nodes.find(n => n.id === layout.otherwiseNodes[i].id);
+            if (node) node.position.y = baseY;
+          }
+        }
+      });
     };
 
     // Add start node
-    const startPos = findAvailablePosition(centerX, yPosition, 60, 60);
     nodes.push({
       id: 'start',
       type: 'start',
-      position: startPos,
+      position: { x: centerX, y: yPosition },
       data: { label: 'Start' }
     });
-    registerPosition(startPos.x, startPos.y, 60, 60);
 
     let previousNodeId = 'start';
     yPosition += minNodeSpacing;
@@ -459,7 +581,6 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
       let taskType = 'unknown';
       let description = '';
       let subtype = '';
-      let xPosition = centerX;
 
       // Handle IF condition (Gateway)
       if (step.if) {
@@ -488,6 +609,7 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
           gatewayType = 'event';
         }
 
+        // Position gateway at center
         nodes.push({
           id: nodeId,
           type: nodeType,
@@ -500,13 +622,24 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
           }
         });
 
-        // Connect previous to gateway
+        // Start branch layout tracking
+        startBranchLayout(nodeId, yPosition);
+
+        // Connect previous to gateway using appropriate handles
         if (previousNodeId) {
+          const sourceHandle = previousNodeId === 'start' ? 'bottom-out' : 'bottom-out';
           edges.push({
             id: `edge-${previousNodeId}-${nodeId}`,
             source: previousNodeId,
             target: nodeId,
-            animated: true
+            sourceHandle: sourceHandle,
+            targetHandle: 'top',
+            type: 'smoothstep',
+            animated: false,
+            style: { 
+              stroke: '#6b7280', 
+              strokeWidth: 2
+            }
           });
         }
 
@@ -529,7 +662,7 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
       if (step.otherwise) {
         // Switch to otherwise branch
         currentBranch = 'otherwise';
-        // Reset to gateway level for otherwise branch
+        // Reset to gateway level for otherwise branch - start at same Y as IF branch
         if (branchStack.length > 0) {
           const currentGateway = branchStack[branchStack.length - 1];
           yPosition = currentGateway.returnY + minNodeSpacing;
@@ -558,20 +691,16 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
         }
       }
 
-      // Position nodes based on current branch
-      if (currentBranch === 'if') {
-        xPosition = centerX - branchOffset;
-      } else if (currentBranch === 'otherwise') {
-        xPosition = centerX + branchOffset;
-      } else {
-        xPosition = centerX;
-      }
+      // Determine position based on current branch with improved alignment
+      const nodeX = currentBranch === 'if' ? centerX - branchOffset :
+                    currentBranch === 'otherwise' ? centerX + branchOffset :
+                    centerX;
 
-      // Create the node
+      // Create the node at current yPosition
       nodes.push({
         id: nodeId,
         type: nodeType,
-        position: { x: xPosition, y: yPosition },
+        position: { x: nodeX, y: yPosition },
         data: { 
           taskType,
           description: description.length > 60 ? description.substring(0, 57) + '...' : description,
@@ -580,15 +709,21 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
         }
       });
 
-      // Connect nodes with improved BPMN-compliant logic
+      // Add to branch tracking
+      if (currentBranch === 'if' || currentBranch === 'otherwise') {
+        addNodeToBranch(nodeId, yPosition, currentBranch);
+      }
+
+      // Connect nodes with enhanced handle-specific logic
       if (currentBranch === 'if' && gatewayNodeId && yPosition === branchStartY) {
-        // First node in IF branch - connect from gateway with "Yes" label
+        // First node in IF branch - connect from gateway LEFT handle (Yes branch)
         edges.push({
           id: `edge-${gatewayNodeId}-${nodeId}`,
           source: gatewayNodeId,
           target: nodeId,
-          sourceHandle: 'bottom',
-          targetHandle: 'top',
+          sourceHandle: 'left',
+          targetHandle: 'top-in',
+          type: 'smoothstep',
           label: '✓ Yes',
           labelStyle: { 
             fill: '#059669', 
@@ -602,21 +737,21 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
           labelBgPadding: [8, 4],
           labelBgBorderRadius: 4,
           labelBgStyle: { fill: 'white', fillOpacity: 0.9 },
-          animated: true,
+          animated: false,
           style: { 
             stroke: '#059669', 
-            strokeWidth: 2,
-            strokeDasharray: '0'
+            strokeWidth: 3
           }
         });
       } else if (currentBranch === 'otherwise' && gatewayNodeId && yPosition === branchStartY) {
-        // First node in OTHERWISE branch - connect from gateway with "No" label  
+        // First node in OTHERWISE branch - connect from gateway RIGHT handle (No branch)
         edges.push({
           id: `edge-${gatewayNodeId}-${nodeId}`,
           source: gatewayNodeId,
           target: nodeId,
           sourceHandle: 'right',
-          targetHandle: 'top',
+          targetHandle: 'top-in',
+          type: 'smoothstep',
           label: '✗ No',
           labelStyle: { 
             fill: '#dc2626', 
@@ -630,23 +765,28 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
           labelBgPadding: [8, 4],
           labelBgBorderRadius: 4,
           labelBgStyle: { fill: 'white', fillOpacity: 0.9 },
-          animated: true,
+          animated: false,
           style: { 
             stroke: '#dc2626', 
-            strokeWidth: 2,
-            strokeDasharray: '0'
+            strokeWidth: 3
           }
         });
       } else if (previousNodeId && 
                  (currentBranch === 'main' || 
                   (currentBranch === 'if' && yPosition > branchStartY) ||
                   (currentBranch === 'otherwise' && yPosition > branchStartY))) {
-        // Connect within branch or main flow
+        // Connect within branch or main flow using appropriate handles
+        const sourceHandle = currentBranch === 'main' ? 'bottom-out' : 'bottom-out';
+        const targetHandle = currentBranch === 'main' ? 'top-in' : 'top-in';
+        
         edges.push({
           id: `edge-${previousNodeId}-${nodeId}`,
           source: previousNodeId,
           target: nodeId,
-          animated: true,
+          sourceHandle: sourceHandle,
+          targetHandle: targetHandle,
+          type: 'smoothstep',
+          animated: false,
           style: { 
             stroke: '#6b7280', 
             strokeWidth: 2
@@ -655,6 +795,8 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
       }
 
       previousNodeId = nodeId;
+      
+      // Always increment Y position to ensure vertical separation
       yPosition += minNodeSpacing;
 
       // Handle end events - reset branch context
@@ -665,12 +807,53 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
             branchStack.pop();
           }
           currentBranch = 'main';
-          xPosition = centerX;
-          // Continue after the gateway
-          yPosition = Math.max(yPosition, branchStartY + minNodeSpacing * 3);
+          // Ensure next nodes continue below both branches
+          if (currentBranchLayout) {
+            yPosition = Math.max(yPosition, currentBranchLayout.maxY + minNodeSpacing);
+          }
         }
       }
     });
+
+    // Post-processing: Improve alignment and spacing
+    const postProcessLayout = () => {
+      // First pass: Ensure adequate spacing between consecutive nodes
+      const sortedNodes = [...nodes].sort((a, b) => a.position.y - b.position.y);
+      
+      for (let i = 1; i < sortedNodes.length; i++) {
+        const prevNode = sortedNodes[i - 1];
+        const currentNode = sortedNodes[i];
+        const requiredSpacing = minNodeSpacing * 0.9;
+        
+        if (currentNode.position.y - prevNode.position.y < requiredSpacing) {
+          // Push down this node and all subsequent nodes at same Y
+          const adjustment = requiredSpacing - (currentNode.position.y - prevNode.position.y);
+          const nodesToAdjust = nodes.filter(n => n.position.y >= currentNode.position.y);
+          nodesToAdjust.forEach(n => {
+            n.position.y += adjustment;
+          });
+        }
+      }
+      
+      // Second pass: Align end nodes that should merge back to center
+      const endNodes = nodes.filter(n => 
+        n.data.taskType === 'endEvent' || 
+        n.data.taskType === 'stop' ||
+        n.data.description?.toLowerCase().includes('stop')
+      );
+      
+      // Move end nodes that are in branches back toward center
+      endNodes.forEach(node => {
+        if (Math.abs(node.position.x - centerX) > 100) {
+          // This is a branch end node, move it closer to center
+          node.position.x = centerX + (node.position.x - centerX) * 0.3;
+        }
+      });
+    };
+    
+    // Apply branch balancing and post-processing
+    balanceBranchHeights();
+    postProcessLayout();
 
     // Add implicit connections for better flow visualization
     nodes.forEach((node, index) => {
@@ -734,6 +917,13 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
+        connectionLineType={ConnectionLineType.SmoothStep}
+        connectionLineStyle={{ stroke: '#6b7280', strokeWidth: 2 }}
+        defaultEdgeOptions={{
+          type: 'smoothstep',
+          animated: false,
+          style: { stroke: '#6b7280', strokeWidth: 2 }
+        }}
         fitView
         fitViewOptions={{
           padding: 0.2,

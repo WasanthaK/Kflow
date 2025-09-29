@@ -15,12 +15,16 @@
    - **Source**: GitHub
    - **Repository**: `WasanthaK/Kflow`
    - **Branch**: `main`
-   - **Build Presets**: React
+   - **Build Presets**: Custom (not React - we use PNPM monorepo)
    - **App location**: `/packages/studio`
    - **Output location**: `dist`
 
 3. Click "Review + Create" → "Create"
-4. Azure will automatically set up CI/CD with GitHub Actions
+4. Azure will provide a deployment token
+5. **Important**: Add the deployment token to GitHub Secrets:
+   - Go to `https://github.com/WasanthaK/Kflow/settings/secrets/actions`
+   - Add secret: `AZURE_STATIC_WEB_APPS_API_TOKEN`
+   - Value: Copy from Azure Portal → Your Static Web App → "Manage deployment token"
 
 ### **Option 2: Azure CLI Deploy**
 
@@ -54,21 +58,20 @@ az staticwebapp create \
 4. Configure build settings:
    - **App location**: `/packages/studio`
    - **Output location**: `dist`
-   - **Build preset**: React
+   - **Build preset**: Custom (we have our own GitHub Actions workflow)
 
 ## 🔧 **Pre-Deployment Checklist**
 
 ### 1. Build Verification
 ```bash
-# Test local build
+# Test local build (use exact same commands as CI/CD)
 cd /workspaces/Kflow
-pnpm install
-pnpm build
+pnpm install --frozen-lockfile
+pnpm --filter @kflow/language build
+pnpm --filter @kflow/studio build
 
-# Test studio specifically
-cd packages/studio
-pnpm build
-pnpm preview
+# Test studio preview
+pnpm --filter @kflow/studio preview
 ```
 
 ### 2. Environment Variables (Optional)
@@ -84,10 +87,14 @@ VITE_VERSION=1.0.0
 ## 🌐 **Post-Deployment Features**
 
 ### **Automatic CI/CD**
+- ✅ **Custom GitHub Actions workflow** (`.github/workflows/azure-static-web-apps.yml`)
+- ✅ **PNPM monorepo support** with sequential package builds
 - ✅ Deploys on every push to `main`
 - ✅ Preview deployments for PRs
-- ✅ Automatic build optimization
+- ✅ Automatic build optimization (ESBuild + manual chunks)
 - ✅ Global CDN distribution
+
+**Note**: Don't use Azure's auto-generated workflow - we have a custom one optimized for this monorepo structure.
 
 ### **Custom Domain Setup**
 ```bash
@@ -121,10 +128,11 @@ az staticwebapp hostname set \
 ## 🚀 **Production Optimizations**
 
 ### 1. Performance
-```json
-// packages/studio/vite.config.ts
+```typescript
+// packages/studio/vite.config.ts (already optimized)
 export default defineConfig({
   plugins: [react()],
+  server: { port: 5173 },
   build: {
     rollupOptions: {
       output: {
@@ -133,9 +141,16 @@ export default defineConfig({
           reactflow: ['reactflow']
         }
       }
-    }
+    },
+    sourcemap: false,
+    minify: 'esbuild',
+    target: 'es2020'
+  },
+  base: './',
+  esbuild: {
+    drop: ['console', 'debugger'] // Removes console.log in production
   }
-})
+});
 ```
 
 ### 2. SEO & Meta Tags
@@ -175,11 +190,14 @@ az staticwebapp appsettings set \
 
 After deployment, you'll have:
 
-- ✅ **Public URL**: `https://kflow-studio.azurestaticapps.net`
+- ✅ **Public URL**: `https://kflow-studio.azurestaticapps.net` (or your chosen name)
+- ✅ **Complete Kflow Studio**: Visual workflow editor with AI assistance
+- ✅ **BPMN Graph Visualization**: Interactive ReactFlow-powered diagrams  
+- ✅ **Natural Language Processing**: StoryFlow → BPMN compilation
 - ✅ **Custom Domain**: `https://your-domain.com` (optional)
-- ✅ **Global CDN**: Fast loading worldwide
+- ✅ **Global CDN**: Fast loading worldwide (~350KB gzipped bundle)
 - ✅ **Auto-scaling**: Handles traffic spikes
-- ✅ **CI/CD Pipeline**: Automatic deployments
+- ✅ **CI/CD Pipeline**: Automatic deployments from GitHub
 - ✅ **SSL Security**: HTTPS by default
 - ✅ **99.9% Uptime**: Azure SLA guarantee
 
