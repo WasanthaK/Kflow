@@ -9,8 +9,7 @@ interface AutocompleteSuggestion {
   confidence: number;
   description?: string;
   category?: string;
-}
-
+    }
 // AI Autocomplete Integration
 let autocompleteEngine: any = null;
 
@@ -67,7 +66,7 @@ function storyToSimple(story: string): string {
       
       // Enhanced task type detection
       if (/^ask /i.test(l)) {
-        return { 
+        return {
           userTask: {
             description: l.slice(4).trim(),
             assignee: extractAssignee(l),
@@ -296,6 +295,11 @@ Otherwise
   const [assistVisible, setAssistVisible] = useState(false);
   const [showGraph, setShowGraph] = useState(true);
   
+  // Layout states
+  const [layoutMode, setLayoutMode] = useState<'horizontal' | 'vertical'>('horizontal');
+  const [leftPanelWidth, setLeftPanelWidth] = useState(50); // percentage
+  const [isDragging, setIsDragging] = useState(false);
+  
   // AI Integration states
   const [aiEnabled, setAiEnabled] = useState(false);
   const [apiKey, setApiKey] = useState('');
@@ -331,14 +335,66 @@ Otherwise
     }
   }, [story, handleConvert]);
 
-  // Initialize AI on component mount
+  // Initialize AI and load saved preferences
   useEffect(() => {
     const savedKey = localStorage.getItem('openai-api-key');
     if (savedKey) {
       setApiKey(savedKey);
       setAiEnabled(initializeAI());
     }
+
+    // Load saved layout preferences
+    const savedLayout = localStorage.getItem('kflow-layout-mode');
+    const savedPanelWidth = localStorage.getItem('kflow-panel-width');
+    
+    if (savedLayout === 'horizontal' || savedLayout === 'vertical') {
+      setLayoutMode(savedLayout);
+    }
+    if (savedPanelWidth) {
+      const width = parseFloat(savedPanelWidth);
+      if (width >= 20 && width <= 80) {
+        setLeftPanelWidth(width);
+      }
+    }
   }, []);
+
+  // Save layout preferences
+  useEffect(() => {
+    localStorage.setItem('kflow-layout-mode', layoutMode);
+  }, [layoutMode]);
+
+  useEffect(() => {
+    localStorage.setItem('kflow-panel-width', leftPanelWidth.toString());
+  }, [leftPanelWidth]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+          case '1':
+            e.preventDefault();
+            setLayoutMode('horizontal');
+            break;
+          case '2':
+            e.preventDefault();
+            setLayoutMode('vertical');
+            break;
+          case 'g':
+            e.preventDefault();
+            setShowGraph(!showGraph);
+            break;
+          case 'f':
+            e.preventDefault();
+            setGraphFullscreen(!graphFullscreen);
+            break;
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showGraph, graphFullscreen]);
 
   // AI Setup Functions
   const handleApiKeySetup = useCallback(() => {
@@ -438,524 +494,134 @@ Otherwise
     return 'general';
   }, []);
 
-  return (
-    <div style={{ 
-      height: '100vh', 
-      width: '100vw', 
-      fontFamily: 'system-ui, sans-serif',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-      backgroundColor: '#f8fafc'
-    }}>
-      {/* Header Bar */}
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
-        padding: '12px 20px',
-        backgroundColor: '#f8fafc',
-        borderBottom: '2px solid #e2e8f0',
-        flexShrink: 0,
-        minHeight: '60px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <h1 style={{ margin: 0, color: '#2563eb', fontSize: '1.5rem' }}>🔄 Kflow Studio</h1>
-          <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', gap: '6px' }}>
-            <span style={{ backgroundColor: '#f3f4f6', padding: '3px 6px', borderRadius: '3px' }}>
-              📊 Visual
-            </span>
-            <span style={{ backgroundColor: '#f3f4f6', padding: '3px 6px', borderRadius: '3px' }}>
-              🏗️ BPMN
-            </span>
-            <span style={{ backgroundColor: '#f3f4f6', padding: '3px 6px', borderRadius: '3px' }}>
-              ⚡ Real-time
-            </span>
-            <span style={{ 
-              backgroundColor: aiEnabled ? '#dcfce7' : '#fef2f2', 
-              color: aiEnabled ? '#16a34a' : '#dc2626',
-              padding: '3px 6px', 
-              borderRadius: '3px' 
-            }}>
-              🤖 AI {aiEnabled ? 'ON' : 'OFF'}
-            </span>
-          </div>
-        </div>
-        
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => setShowAiSetup(!showAiSetup)}
-            style={{
-              padding: '6px 10px',
-              backgroundColor: aiEnabled ? '#16a34a' : '#f59e0b',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '11px',
-              cursor: 'pointer',
-              fontWeight: '600'
-            }}
-          >
-            🤖 {aiEnabled ? 'AI Ready' : 'Setup AI'}
-          </button>
-        </div>
-      </div>
+  // Resizer handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
 
-      {/* AI Setup Panel */}
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging) return;
+    
+    const container = document.getElementById('main-container');
+    if (!container) return;
+    
+    const rect = container.getBoundingClientRect();
+    
+    if (layoutMode === 'horizontal') {
+      const newWidth = ((e.clientX - rect.left) / rect.width) * 100;
+      setLeftPanelWidth(Math.max(20, Math.min(80, newWidth)));
+    } else {
+      const newHeight = ((e.clientY - rect.top) / rect.height) * 100;
+      setLeftPanelWidth(Math.max(20, Math.min(80, newHeight)));
+    }
+  }, [isDragging, layoutMode]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  // Mouse event listeners
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = layoutMode === 'horizontal' ? 'col-resize' : 'row-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isDragging, handleMouseMove, handleMouseUp, layoutMode]);
+  return (
+    <div style={{height:'100vh',width:'100vw',display:'flex',flexDirection:'column',fontFamily:'system-ui, sans-serif',background:'#f8fafc',overflow:'hidden'}}>
+      <header style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 14px',borderBottom:'1px solid #e2e8f0',background:'#f8fafc'}}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <strong style={{color:'#2563eb'}}>Kflow Studio</strong>
+          <span style={{fontSize:12,color:'#6b7280'}}>AI {aiEnabled? 'ON':'OFF'}</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <button onClick={()=>setLayoutMode('horizontal')} style={{padding:'4px 8px',background:layoutMode==='horizontal'?'#3b82f6':'#e5e7eb',color:layoutMode==='horizontal'?'#fff':'#374151',border:'none',borderRadius:4,cursor:'pointer'}}>Side</button>
+          <button onClick={()=>setLayoutMode('vertical')} style={{padding:'4px 8px',background:layoutMode==='vertical'?'#3b82f6':'#e5e7eb',color:layoutMode==='vertical'?'#fff':'#374151',border:'none',borderRadius:4,cursor:'pointer'}}>Stack</button>
+          <button onClick={()=>setShowGraph(g=>!g)} style={{padding:'4px 8px',background:showGraph?'#059669':'#6b7280',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>{showGraph?'Graph ON':'Graph OFF'}</button>
+          <button onClick={()=>setShowAiSetup(s=>!s)} style={{padding:'4px 8px',background:aiEnabled?'#16a34a':'#f59e0b',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>{aiEnabled?'AI Ready':'Setup AI'}</button>
+        </div>
+      </header>
+
       {showAiSetup && (
-        <div style={{
-          backgroundColor: '#f8fafc',
-          border: '2px solid #e2e8f0',
-          borderRadius: '8px',
-          padding: '20px',
-          marginBottom: '20px'
-        }}>
-          <h3 style={{ margin: '0 0 16px 0', color: '#1f2937' }}>🤖 AI Autocomplete Setup</h3>
-          <p style={{ color: '#6b7280', marginBottom: '16px', lineHeight: '1.5' }}>
-            Enable AI-powered autocomplete with your OpenAI API key. Press <strong>Tab</strong> in the editor for smart suggestions.
-          </p>
-          
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px' }}>
-            <input
-              type="password"
-              placeholder="Enter your OpenAI API key"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              style={{
-                flex: 1,
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '4px',
-                fontSize: '14px'
-              }}
-            />
-            <button
-              onClick={handleApiKeySetup}
-              disabled={!apiKey.trim()}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#059669',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: apiKey.trim() ? 'pointer' : 'not-allowed',
-                fontWeight: '600',
-                opacity: apiKey.trim() ? 1 : 0.5
-              }}
-            >
-              Activate AI
-            </button>
-            {aiEnabled && (
-              <button
-                onClick={handleClearApiKey}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#dc2626',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: '600'
-                }}
-              >
-                Clear Key
-              </button>
-            )}
-          </div>
-          
-          <div style={{ fontSize: '12px', color: '#6b7280' }}>
-            Your API key is stored locally and never sent to our servers. 
-            {aiEnabled && <span style={{ color: '#16a34a', fontWeight: '600' }}> ✅ AI is active - press Tab for suggestions!</span>}
-          </div>
+        <div style={{padding:12,borderBottom:'1px solid #e5e7eb',background:'#fff',display:'flex',alignItems:'center',gap:8}}>
+          <input type="password" value={apiKey} placeholder="OpenAI API Key" onChange={e=>setApiKey(e.target.value)} style={{flex:1,padding:'6px 8px',border:'1px solid #d1d5db',borderRadius:4}} />
+          <button disabled={!apiKey.trim()} onClick={handleApiKeySetup} style={{padding:'6px 10px',background:'#059669',color:'#fff',border:'none',borderRadius:4,cursor:apiKey.trim()?'pointer':'not-allowed'}}>Activate</button>
+          {aiEnabled && <button onClick={handleClearApiKey} style={{padding:'6px 10px',background:'#dc2626',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>Clear</button>}
         </div>
       )}
 
-      {/* Main Content Area with Resizable Layout */}
-      <div style={{ 
-        flex: 1, 
-        display: 'flex', 
-        overflow: 'hidden',
-        minHeight: 0 
-      }}>
-        {/* Left Panel - Story Editor */}
-        <div style={{ 
-          width: showGraph ? '40%' : '100%',
-          minWidth: '350px',
-          display: 'flex',
-          flexDirection: 'column',
-          borderRight: showGraph ? '2px solid #e2e8f0' : 'none',
-          transition: 'width 0.3s ease'
-        }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between',
-            padding: '16px 20px 12px 20px',
-            backgroundColor: '#f9fafb',
-            borderBottom: '1px solid #e5e7eb',
-            flexShrink: 0
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <label style={{ fontWeight: '600', fontSize: '16px', color: '#1f2937' }}>📝 StoryFlow Editor</label>
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => setShowGraph(!showGraph)}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: showGraph ? '#059669' : '#6b7280',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  fontWeight: '500'
-                }}
-              >
-                {showGraph ? '📊 Hide Graph' : '📊 Show Graph'}
-              </button>
-              <button
-                onClick={() => setGraphFullscreen(!graphFullscreen)}
-                disabled={!showGraph}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: showGraph ? '#3b82f6' : '#9ca3af',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  cursor: showGraph ? 'pointer' : 'not-allowed',
-                  fontWeight: '500'
-                }}
-              >
-                🖥️ Fullscreen
-              </button>
+      <div id="main-container" style={{flex:1,display:'flex',flexDirection:layoutMode==='horizontal'?'row':'column',overflow:'hidden',minHeight:0}}>
+        <div style={{width:layoutMode==='horizontal'&&showGraph?`${leftPanelWidth}%`:'100%',height:layoutMode==='vertical'&&showGraph?`${leftPanelWidth}%`:'100%',display:'flex',flexDirection:'column',borderRight:showGraph&&layoutMode==='horizontal'?'1px solid #e5e7eb':'none',borderBottom:showGraph&&layoutMode==='vertical'?'1px solid #e5e7eb':'none',background:'#fff',minWidth:0,minHeight:0}}>
+          <div style={{padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid #e5e7eb'}}>
+            <span style={{fontWeight:600}}>Story</span>
+            <div style={{display:'flex',gap:6}}>
+              <button onClick={handleConvert} disabled={isConverting} style={{padding:'4px 8px',background:'#2563eb',color:'#fff',border:'none',borderRadius:4,cursor:isConverting?'not-allowed':'pointer'}}>{isConverting?'Converting...':'Convert'}</button>
+              <button onClick={()=>setAssistVisible(v=>!v)} style={{padding:'4px 8px',background:'#7c3aed',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>{assistVisible?'Hide Info':'Show Info'}</button>
+              {showGraph && <button onClick={()=>setGraphFullscreen(true)} style={{padding:'4px 8px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>Fullscreen</button>}
             </div>
           </div>
-          
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px', minHeight: 0 }}>
-            <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <textarea 
-                ref={textareaRef}
-                value={story} 
-                onChange={event => setStory(event.target.value)}
-                onKeyDown={handleTextareaKeyDown}
-                style={{ 
-                  width: '100%', 
-                  flex: 1,
-                  minHeight: '300px',
-                  fontFamily: 'Monaco, Consolas, monospace',
-                  fontSize: '14px',
-                  padding: '15px',
-                  border: `2px solid ${aiEnabled ? '#10b981' : '#e5e7eb'}`,
-                  borderRadius: '8px',
-                  resize: 'none',
-                  lineHeight: '1.5',
-                  backgroundColor: aiEnabled ? '#f0fdf4' : 'white',
-                  outline: 'none'
-                }}
-                placeholder={aiEnabled ? 
-                  "Enter your StoryFlow here... (Press Tab for AI suggestions)" : 
-                  "Enter your StoryFlow here..."
-                }
-              />
-            
-              
-              {aiEnabled && (
-                <div style={{
-                  position: 'absolute',
-                  top: '8px',
-                  right: '15px',
-                  backgroundColor: '#10b981',
-                  color: 'white',
-                  padding: '2px 6px',
-                  borderRadius: '3px',
-                  fontSize: '10px',
-                  fontWeight: '600'
-                }}>
-                  AI ON
-                </div>
-              )}            {/* AI Suggestions Dropdown */}
-            {showSuggestions && suggestions.length > 0 && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                right: 0,
-                backgroundColor: 'white',
-                border: '2px solid #10b981',
-                borderRadius: '8px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                zIndex: 1000,
-                maxHeight: '200px',
-                overflowY: 'auto'
-              }}>
-                <div style={{ padding: '8px', backgroundColor: '#f0fdf4', fontSize: '12px', fontWeight: '600', color: '#059669' }}>
-                  🤖 AI Suggestions (Click to apply):
-                </div>
-                {suggestions.map((suggestion, index) => (
-                  <div
-                    key={index}
-                    onClick={() => applySuggestion(suggestion)}
-                    style={{
-                      padding: '12px',
-                      borderBottom: index < suggestions.length - 1 ? '1px solid #e5e7eb' : 'none',
-                      cursor: 'pointer',
-                      backgroundColor: 'white'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                  >
-                    <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '4px' }}>
-                      {suggestion.text}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#6b7280' }}>
-                      {suggestion.type} • {Math.round(suggestion.confidence * 100)}% confidence
-                      {suggestion.description && ` • ${suggestion.description}`}
-                    </div>
-                  </div>
+          <div style={{flex:1,position:'relative',display:'flex',flexDirection:'column',minHeight:0}}>
+            <textarea ref={textareaRef} value={story} onChange={e=>setStory(e.target.value)} onKeyDown={handleTextareaKeyDown} style={{flex:1,minHeight:0,border:`2px solid ${aiEnabled?'#10b981':'#e5e7eb'}`,margin:12,borderRadius:6,padding:12,fontFamily:'Monaco, monospace',fontSize:14,resize:'none',background:aiEnabled?'#f0fdf4':'#fff'}} />
+            {aiEnabled && <div style={{position:'absolute',top:14,right:20,background:'#10b981',color:'#fff',padding:'2px 6px',fontSize:10,borderRadius:3,fontWeight:600}}>AI ON</div>}
+            {showSuggestions && suggestions.length>0 && (
+              <div style={{position:'absolute',left:12,right:12,top:'calc(100% - 4px)',background:'#fff',border:'1px solid #10b981',borderRadius:6,boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:20,maxHeight:180,overflowY:'auto'}}>
+                <div style={{padding:6,fontSize:11,fontWeight:600,background:'#f0fdf4',color:'#059669'}}>AI Suggestions</div>
+                {suggestions.map((s,i)=> (
+                  <div key={i} onClick={()=>applySuggestion(s)} style={{padding:8,fontSize:12,cursor:'pointer',borderTop:'1px solid #f1f5f9'}}>{s.text}</div>
                 ))}
               </div>
             )}
           </div>
-
-          <div style={{ marginTop: '16px', display: 'flex', gap: '12px' }}>
-            <button 
-              type="button" 
-              onClick={handleConvert} 
-              disabled={isConverting}
-              style={{ 
-                padding: '12px 20px',
-                backgroundColor: '#2563eb',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: '600',
-                cursor: isConverting ? 'not-allowed' : 'pointer',
-                opacity: isConverting ? 0.6 : 1
-              }}
-            >
-              {isConverting ? '⏳ Converting...' : '🔄 Convert'}
-            </button>
-            
-            <button 
-              type="button" 
-              onClick={() => setAssistVisible(!assistVisible)}
-              style={{ 
-                padding: '12px 20px',
-                backgroundColor: '#7c3aed',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: '600',
-                cursor: 'pointer'
-              }}
-            >
-              {assistVisible ? '🔍 Hide Info' : '💡 Show Info'}
-            </button>
-          </div>
-
-          {error && (
-            <div style={{ 
-              color: '#dc2626', 
-              backgroundColor: '#fef2f2',
-              border: '1px solid #fecaca',
-              padding: '12px',
-              borderRadius: '6px',
-              marginTop: '16px'
-            }}>
-              ❌ Error: {error}
-            </div>
+          {error && <div style={{color:'#dc2626',background:'#fef2f2',border:'1px solid #fecaca',margin:12,padding:8,borderRadius:4,fontSize:12}}>Error: {error}</div>}
+          {converted && assistVisible && (
+            <pre style={{margin:12,background:'#f8fafc',border:'1px solid #e2e8f0',padding:12,borderRadius:6,fontSize:12,maxHeight:200,overflow:'auto'}}>{converted}</pre>
           )}
         </div>
 
-        {/* Right Panel - Visual Graph */}
         {showGraph && (
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontWeight: '600', fontSize: '16px' }}>📊 Visual Workflow Graph:</h3>
-              <button
-                onClick={() => setGraphFullscreen(!graphFullscreen)}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: '#3b82f6',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  fontWeight: '600'
-                }}
-              >
-                {graphFullscreen ? '📱 Exit Fullscreen' : '🖥️ Fullscreen'}
-              </button>
-            </div>
-            <div style={{ 
-              border: '2px solid #e5e7eb', 
-              borderRadius: '8px', 
-              height: '500px',
-              backgroundColor: '#fafafa',
-              overflow: 'hidden'
-            }}>
-              <WorkflowGraph workflowData={(() => {
-                try {
-                  if (!converted) {
-                    console.log('No converted data available');
-                    return null;
-                  }
-                  const parsed = JSON.parse(converted);
-                  console.log('Parsed workflow data:', parsed);
-                  return parsed;
-                } catch (error) {
-                  console.error('Failed to parse workflow data:', error);
-                  console.log('Raw converted data:', converted);
-                  return null;
-                }
-              })()} />
+          <div style={{display:'flex',flexDirection:layoutMode==='horizontal'?'row':'column',flex:1,minWidth:0,minHeight:0}}>
+            <div onMouseDown={handleMouseDown} style={{width:layoutMode==='horizontal'?'4px':'100%',height:layoutMode==='vertical'?'4px':'100%',background:isDragging?'#3b82f6':'#e5e7eb',cursor:layoutMode==='horizontal'?'col-resize':'row-resize'}} />
+            <div style={{flex:1,minWidth:0,minHeight:0,background:'#fff',display:'flex',flexDirection:'column'}}>
+              <div style={{padding:'6px 10px',borderBottom:'1px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:12,fontWeight:600}}>Graph</span>
+                <div style={{display:'flex',gap:6}}>
+                  <button onClick={()=>setGraphFullscreen(true)} style={{padding:'4px 8px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>Fullscreen</button>
+                </div>
+              </div>
+              <div style={{flex:1,minHeight:0}}>
+                <WorkflowGraph workflowData={(() => { try { if(!converted) return null; return JSON.parse(converted);} catch { return null; } })()} />
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Fullscreen Graph Modal */}
       {graphFullscreen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'white',
-          zIndex: 9999,
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '16px 20px',
-            borderBottom: '2px solid #e5e7eb',
-            backgroundColor: '#f9fafb'
-          }}>
-            <h2 style={{ margin: 0, color: '#1f2937', fontSize: '20px' }}>
-              📊 {converted ? JSON.parse(converted).flow : 'Workflow Graph'} - Fullscreen View
-            </h2>
-            <button
-              onClick={() => setGraphFullscreen(false)}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#dc2626',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '14px',
-                cursor: 'pointer',
-                fontWeight: '600'
-              }}
-            >
-              ✕ Close Fullscreen
-            </button>
+        <div style={{position:'fixed',inset:0,background:'#fff',zIndex:9999,display:'flex',flexDirection:'column'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 14px',borderBottom:'1px solid #e5e7eb'}}>
+            <strong>Fullscreen Graph</strong>
+            <button onClick={()=>setGraphFullscreen(false)} style={{padding:'4px 10px',background:'#dc2626',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>Close</button>
           </div>
-          <div style={{ flex: 1, backgroundColor: '#fafafa' }}>
-            <WorkflowGraph workflowData={(() => {
-              try {
-                if (!converted) return null;
-                return JSON.parse(converted);
-              } catch (error) {
-                console.error('Fullscreen graph parse error:', error);
-                return null;
-              }
-            })()} />
+          <div style={{flex:1}}>
+            <WorkflowGraph workflowData={(() => { try { if(!converted) return null; return JSON.parse(converted);} catch { return null; } })()} />
           </div>
         </div>
       )}
-
-      {/* Output Panel */}
-      {converted && (
-        <div style={{ marginTop: '24px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
-            ✅ Enhanced SimpleScript Output:
-          </label>
-          <pre style={{ 
-            backgroundColor: '#f8fafc', 
-            padding: '20px', 
-            border: '2px solid #e2e8f0',
-            borderRadius: '8px',
-            whiteSpace: 'pre-wrap',
-            fontSize: '13px',
-            lineHeight: '1.4',
-            overflow: 'auto',
-            maxHeight: '300px'
-          }}>
-            {converted}
-          </pre>
-        </div>
-      )}
-
-      {/* Info Panel */}
-      {assistVisible && (
-        <div style={{ marginTop: '24px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
-            <div>
-              <h3 style={{ color: '#7c3aed', marginBottom: '12px' }}>🤖 AI Features:</h3>
-              <ul style={{ lineHeight: '1.6', color: '#374151' }}>
-                <li>🧠 <strong>Smart Autocomplete</strong>: {aiEnabled ? 'Press Tab for suggestions' : 'Setup API key to enable'}</li>
-                <li>🎯 <strong>Context Awareness</strong>: Domain-specific suggestions</li>
-                <li>📝 <strong>Pattern Recognition</strong>: Smart workflow templates</li>
-                <li>⚡ <strong>Fallback Logic</strong>: Rule-based suggestions without AI</li>
-                <li>🔒 <strong>Privacy First</strong>: API key stored locally only</li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 style={{ color: '#059669', marginBottom: '12px' }}>✅ Visual Features:</h3>
-              <ul style={{ lineHeight: '1.6', color: '#374151' }}>
-                <li>📊 <strong>Interactive Graph</strong>: ReactFlow-powered diagrams</li>
-                <li>🎯 <strong>BPMN Elements</strong>: Industry-standard notation</li>
-                <li>🔄 <strong>Real-time Updates</strong>: Graph syncs as you type</li>
-                <li>🎨 <strong>Color Coding</strong>: Task type visualization</li>
-                <li>🔀 <strong>Branch Visualization</strong>: Complex If/Otherwise flows</li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 style={{ color: '#dc2626', marginBottom: '12px' }}>🎯 Enhanced BPMN Tasks:</h3>
-              <ul style={{ lineHeight: '1.6', color: '#374151' }}>
-                <li>� <strong>User Tasks</strong>: Human interactions (blue)</li>
-                <li>⚙️ <strong>Service Tasks</strong>: System operations (green)</li>
-                <li>🧮 <strong>Script Tasks</strong>: Calculations & processing (purple)</li>
-                <li>� <strong>Business Rule Tasks</strong>: Decision logic (orange)</li>
-                <li>📧 <strong>Message Tasks</strong>: Communications (red)</li>
-                <li>⏳ <strong>Wait Tasks</strong>: Timer events (gray)</li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 style={{ color: '#f59e0b', marginBottom: '12px' }}>🔧 Advanced Features:</h3>
-              <ul style={{ lineHeight: '1.6', color: '#374151' }}>
-                <li>🏷️ <strong>Branch Labeling</strong>: Clear decision paths</li>
-                <li>� <strong>Variable Extraction</strong>: Auto-detect {`{variables}`}</li>
-                <li>🎭 <strong>Actor Recognition</strong>: Identify workflow roles</li>
-                <li>🧮 <strong>Script Classification</strong>: 6+ calculation subtypes</li>
-                <li>💾 <strong>Template Conversion</strong>: Smart parameterization</li>
-              </ul>
-            </div>
-          </div>
-
-          <div style={{ marginTop: '20px' }}>
-            <h3 style={{ color: '#6b7280', marginBottom: '12px' }}>📋 Workflow Guidelines:</h3>
-            <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-              <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6', color: '#4b5563' }}>
-                {guardrails.map(rule => (
-                  <li key={rule} style={{ marginBottom: '4px' }}>{rule}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
-      </div>
     </div>
   );
 }

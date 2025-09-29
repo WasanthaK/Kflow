@@ -374,23 +374,72 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
     const nodes: Node[] = [];
     const edges: Edge[] = [];
     
-    // Enhanced layout configuration
-    const centerX = 400;
-    const nodeSpacing = 100;
-    const branchOffset = 300;
-    let yPosition = 50;
+    // Enhanced layout configuration with better spacing
+    const centerX = 500;
+    const minNodeSpacing = 180; // Increased from 100
+    const branchOffset = 400; // Increased from 300
+    const nodeWidth = 220; // Max node width
+    const nodeHeight = 80; // Approximate node height
+    let yPosition = 80;
     let nodeCounter = 0;
+    
+    // Track occupied positions to prevent overlaps
+    const occupiedPositions: Array<{x: number, y: number, width: number, height: number}> = [];
+    
+    // Function to check if a position is free
+    const isPositionFree = (x: number, y: number, width: number = nodeWidth, height: number = nodeHeight) => {
+      const buffer = 40; // Extra buffer space
+      return !occupiedPositions.some(pos => 
+        x < pos.x + pos.width + buffer &&
+        x + width + buffer > pos.x &&
+        y < pos.y + pos.height + buffer &&
+        y + height + buffer > pos.y
+      );
+    };
+    
+    // Function to find next available position
+    const findAvailablePosition = (preferredX: number, preferredY: number, width: number = nodeWidth, height: number = nodeHeight) => {
+      let x = preferredX;
+      let y = preferredY;
+      let attempts = 0;
+      
+      while (!isPositionFree(x, y, width, height) && attempts < 50) {
+        if (attempts < 10) {
+          // Try moving right/left first
+          x = preferredX + (attempts % 2 === 0 ? 1 : -1) * Math.floor((attempts + 1) / 2) * 100;
+        } else if (attempts < 20) {
+          // Try moving down
+          y = preferredY + (attempts - 10) * 60;
+          x = preferredX;
+        } else {
+          // Try diagonal positions
+          const offset = (attempts - 20) * 80;
+          x = preferredX + (attempts % 2 === 0 ? offset : -offset);
+          y = preferredY + offset;
+        }
+        attempts++;
+      }
+      
+      return { x, y };
+    };
+    
+    // Function to register occupied position
+    const registerPosition = (x: number, y: number, width: number = nodeWidth, height: number = nodeHeight) => {
+      occupiedPositions.push({ x, y, width, height });
+    };
 
     // Add start node
+    const startPos = findAvailablePosition(centerX, yPosition, 60, 60);
     nodes.push({
       id: 'start',
       type: 'start',
-      position: { x: centerX, y: yPosition },
+      position: startPos,
       data: { label: 'Start' }
     });
+    registerPosition(startPos.x, startPos.y, 60, 60);
 
     let previousNodeId = 'start';
-    yPosition += nodeSpacing;
+    yPosition += minNodeSpacing;
 
     // Enhanced branch tracking with nesting support
     let currentBranch: 'main' | 'if' | 'otherwise' = 'main';
@@ -470,7 +519,7 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
         });
 
         previousNodeId = nodeId;
-        yPosition += nodeSpacing;
+        yPosition += minNodeSpacing;
         currentBranch = 'if';
         branchStartY = yPosition;
         return;
@@ -483,7 +532,7 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
         // Reset to gateway level for otherwise branch
         if (branchStack.length > 0) {
           const currentGateway = branchStack[branchStack.length - 1];
-          yPosition = currentGateway.returnY + nodeSpacing;
+          yPosition = currentGateway.returnY + minNodeSpacing;
           branchStartY = yPosition;
         }
         return;
@@ -606,7 +655,7 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
       }
 
       previousNodeId = nodeId;
-      yPosition += nodeSpacing;
+      yPosition += minNodeSpacing;
 
       // Handle end events - reset branch context
       if (taskType === 'endEvent' || taskType === 'stop') {
@@ -618,7 +667,7 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
           currentBranch = 'main';
           xPosition = centerX;
           // Continue after the gateway
-          yPosition = Math.max(yPosition, branchStartY + nodeSpacing * 3);
+          yPosition = Math.max(yPosition, branchStartY + minNodeSpacing * 3);
         }
       }
     });
