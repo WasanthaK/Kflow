@@ -1,0 +1,34 @@
+# Global code owners
+# These owners will be requested for review when anyone opens a pull request.
+
+# Global owners for all files
+* @WasanthaK
+
+# Specific ownership rules
+
+# TypeScript/React components
+*.tsx @WasanthaK
+*.ts @WasanthaK
+
+# Configuration files  
+package.json @WasanthaK
+tsconfig*.json @WasanthaK
+vite.config.ts @WasanthaK
+
+# Documentation
+*.md @WasanthaK
+
+# GitHub workflows and configs
+.github/ @WasanthaK
+
+# Studio package (main application)
+packages/studio/ @WasanthaK
+
+# Language package (core logic)
+packages/language/ @WasanthaK
+
+# VSCode extension
+packages/vscode-ext/ @WasanthaK
+
+# Examples and demos
+examples/ @WasanthaK

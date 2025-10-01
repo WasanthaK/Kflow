@@ -1,4 +1,4 @@
-import { IR, IRState } from '../ir/types';
+import { IR, IRState } from '../ir/types.js';
 
 export type SimulationOptions = {
   choices?: Record<string, string>;

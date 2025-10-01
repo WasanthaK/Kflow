@@ -1,2 +1,2 @@
-export * from './bpmn';
-export * from './asl';
+export * from './bpmn.js';
+export * from './asl.js';

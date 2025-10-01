@@ -1,6 +1,37 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { rewriteToSimpleScript, guardrails } from '../codex';
 import { WorkflowGraph } from '../components/WorkflowGraph';
+import { storySamples, DEFAULT_SAMPLE_ID, getSampleById } from './samples';
+
+const CUSTOM_SAMPLE_ID = 'custom';
+const DEFAULT_STORY = getSampleById(DEFAULT_SAMPLE_ID)?.content ?? `Flow: Advanced Order Processing System
+
+Ask customer for {order_details} and {payment_method}
+Do: validate customer information using verification service
+Do: calculate order total with taxes and shipping
+
+If {order_total} > 1000
+  Ask manager to approve high-value order
+  If manager_approved
+    Do: process payment using secure gateway
+    Send confirmation email to customer: "Large order approved"
+  Otherwise
+    Send rejection email: "High-value order requires approval"
+    Stop
+Otherwise
+  Do: process standard payment automatically
+  Do: reserve inventory items
+
+Send tracking notification to customer
+Wait for shipping confirmation
+
+If items_shipped
+  Do: update order status to "shipped"
+  Send shipping notification with {tracking_number}
+  Stop
+Otherwise
+  Ask warehouse team to resolve shipping issue
+  Stop`;
 
 // Local AI Types and Implementation
 interface AutocompleteSuggestion {
@@ -260,40 +291,14 @@ function initializeAI() {
 }
 
 export function App() {
-  const [story, setStory] = useState(`Flow: Advanced Order Processing System
-
-Ask customer for {order_details} and {payment_method}
-Do: validate customer information using verification service
-Do: calculate order total with taxes and shipping
-
-If {order_total} > 1000
-  Ask manager to approve high-value order
-  If manager_approved
-    Do: process payment using secure gateway
-    Send confirmation email to customer: "Large order approved"
-  Otherwise
-    Send rejection email: "High-value order requires approval"
-    Stop
-Otherwise
-  Do: process standard payment automatically
-  Do: reserve inventory items
-
-Send tracking notification to customer
-Wait for shipping confirmation
-
-If items_shipped
-  Do: update order status to "shipped"
-  Send shipping notification with {tracking_number}
-  Stop
-Otherwise
-  Ask warehouse team to resolve shipping issue
-  Stop`);
-
+  const [story, setStory] = useState(DEFAULT_STORY);
   const [converted, setConverted] = useState('');
   const [error, setError] = useState('');
   const [isConverting, setIsConverting] = useState(false);
   const [assistVisible, setAssistVisible] = useState(false);
   const [showGraph, setShowGraph] = useState(true);
+  const [selectedSampleId, setSelectedSampleId] = useState<string>(DEFAULT_SAMPLE_ID);
+  const [uploadedFilename, setUploadedFilename] = useState<string | null>(null);
   
   // Layout states
   const [layoutMode, setLayoutMode] = useState<'horizontal' | 'vertical'>('horizontal');
@@ -308,6 +313,9 @@ Otherwise
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [graphFullscreen, setGraphFullscreen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const activeSample = selectedSampleId === CUSTOM_SAMPLE_ID ? undefined : getSampleById(selectedSampleId);
 
   const handleConvert = useCallback(async () => {
     if (!story.trim()) {
@@ -419,6 +427,53 @@ Otherwise
     setShowAiSetup(false);
   }, []);
 
+  const handleSampleSelect = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextId = event.target.value;
+    setSelectedSampleId(nextId);
+    setUploadedFilename(null);
+
+    if (nextId === CUSTOM_SAMPLE_ID) {
+      return;
+    }
+
+    const sample = getSampleById(nextId);
+    if (sample) {
+      setStory(sample.content);
+      setError('');
+    }
+  }, [setStory, setError]);
+
+  const handleUploadClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (file.size > 200 * 1024) {
+      setError('Selected file is larger than 200KB. Please choose a smaller story file.');
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : '';
+      setStory(text);
+      setSelectedSampleId(CUSTOM_SAMPLE_ID);
+      setUploadedFilename(file.name);
+      setError('');
+    };
+    reader.onerror = () => {
+      setError('Failed to read the selected file. Please try again.');
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  }, [setStory, setError]);
+
   // AI Autocomplete Functions
   const handleTextareaKeyDown = useCallback(async (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Tab' && aiEnabled && autocompleteEngine) {
@@ -466,6 +521,8 @@ Otherwise
     // Replace current line with suggestion
     const newStory = [...previousLines, suggestion.text, ...afterCursor.split('\n')].join('\n');
     setStory(newStory);
+    setSelectedSampleId(CUSTOM_SAMPLE_ID);
+    setUploadedFilename(null);
     setShowSuggestions(false);
     
     // Focus back to textarea
@@ -567,16 +624,59 @@ Otherwise
 
       <div id="main-container" style={{flex:1,display:'flex',flexDirection:layoutMode==='horizontal'?'row':'column',overflow:'hidden',minHeight:0}}>
         <div style={{width:layoutMode==='horizontal'&&showGraph?`${leftPanelWidth}%`:'100%',height:layoutMode==='vertical'&&showGraph?`${leftPanelWidth}%`:'100%',display:'flex',flexDirection:'column',borderRight:showGraph&&layoutMode==='horizontal'?'1px solid #e5e7eb':'none',borderBottom:showGraph&&layoutMode==='vertical'?'1px solid #e5e7eb':'none',background:'#fff',minWidth:0,minHeight:0}}>
-          <div style={{padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid #e5e7eb'}}>
-            <span style={{fontWeight:600}}>Story</span>
+          <div style={{padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid #e5e7eb',gap:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontWeight:600}}>Story</span>
+              <select value={selectedSampleId} onChange={handleSampleSelect} style={{padding:'4px 6px',border:'1px solid #d1d5db',borderRadius:4,fontSize:12,color:'#1f2937',background:'#fff',minWidth:180}}>
+                <option value={CUSTOM_SAMPLE_ID}>Custom / Uploaded</option>
+                {storySamples.map(sample => (
+                  <option key={sample.id} value={sample.id}>{sample.name}</option>
+                ))}
+              </select>
+              <select value={''} onChange={e => {
+                const file = e.target.value;
+                if (!file) return;
+                fetch(`/examples/${file}`)
+                  .then(res => res.text())
+                  .then(text => {
+                    setStory(text);
+                    setSelectedSampleId(CUSTOM_SAMPLE_ID);
+                    setUploadedFilename(file);
+                  });
+              }} style={{padding:'4px 6px',border:'1px solid #d1d5db',borderRadius:4,fontSize:12,color:'#1f2937',background:'#e0f2fe',minWidth:180,marginLeft:8}}>
+                <option value=''>Load from examples...</option>
+                <option value='advanced-order-processing.story'>advanced-order-processing.story</option>
+                <option value='approve-vacation.story'>approve-vacation.story</option>
+                <option value='approve-vacation.yaml'>approve-vacation.yaml</option>
+                <option value='ba-requirement.txt'>ba-requirement.txt</option>
+                <option value='complex-support-flow.story'>complex-support-flow.story</option>
+                <option value='fulfill-order.story'>fulfill-order.story</option>
+                <option value='gateway-types-demo.story'>gateway-types-demo.story</option>
+                <option value='support-escalation-brief.txt'>support-escalation-brief.txt</option>
+                <option value='visual-graph-demo.story'>visual-graph-demo.story</option>
+              </select>
+            </div>
             <div style={{display:'flex',gap:6}}>
+              <button onClick={handleUploadClick} style={{padding:'4px 8px',background:'#0ea5e9',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>Upload Story</button>
               <button onClick={handleConvert} disabled={isConverting} style={{padding:'4px 8px',background:'#2563eb',color:'#fff',border:'none',borderRadius:4,cursor:isConverting?'not-allowed':'pointer'}}>{isConverting?'Converting...':'Convert'}</button>
               <button onClick={()=>setAssistVisible(v=>!v)} style={{padding:'4px 8px',background:'#7c3aed',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>{assistVisible?'Hide Info':'Show Info'}</button>
               {showGraph && <button onClick={()=>setGraphFullscreen(true)} style={{padding:'4px 8px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>Fullscreen</button>}
             </div>
           </div>
+          {activeSample && (
+            <div style={{padding:'6px 12px',fontSize:12,color:'#4b5563',background:'#f8fafc',borderBottom:'1px solid #e5e7eb'}}>
+              Loaded sample: <strong>{activeSample.name}</strong>
+              {activeSample.description ? ` — ${activeSample.description}` : ''}
+            </div>
+          )}
+          {uploadedFilename && selectedSampleId === CUSTOM_SAMPLE_ID && (
+            <div style={{padding:'6px 12px',fontSize:12,color:'#0369a1',background:'#e0f2fe',borderBottom:'1px solid #bae6fd'}}>
+              Loaded from file: <strong>{uploadedFilename}</strong>
+            </div>
+          )}
           <div style={{flex:1,position:'relative',display:'flex',flexDirection:'column',minHeight:0}}>
-            <textarea ref={textareaRef} value={story} onChange={e=>setStory(e.target.value)} onKeyDown={handleTextareaKeyDown} style={{flex:1,minHeight:0,border:`2px solid ${aiEnabled?'#10b981':'#e5e7eb'}`,margin:12,borderRadius:6,padding:12,fontFamily:'Monaco, monospace',fontSize:14,resize:'none',background:aiEnabled?'#f0fdf4':'#fff'}} />
+            <input ref={fileInputRef} type="file" accept=".txt,.story,.md,.yaml,.yml,.json" style={{display:'none'}} onChange={handleFileChange} />
+            <textarea ref={textareaRef} value={story} onChange={e=>{setStory(e.target.value); setSelectedSampleId(CUSTOM_SAMPLE_ID); setUploadedFilename(null);}} onKeyDown={handleTextareaKeyDown} style={{flex:1,minHeight:0,border:`2px solid ${aiEnabled?'#10b981':'#e5e7eb'}`,margin:12,borderRadius:6,padding:12,fontFamily:'Monaco, monospace',fontSize:14,resize:'none',background:aiEnabled?'#f0fdf4':'#fff'}} />
             {aiEnabled && <div style={{position:'absolute',top:14,right:20,background:'#10b981',color:'#fff',padding:'2px 6px',fontSize:10,borderRadius:3,fontWeight:600}}>AI ON</div>}
             {showSuggestions && suggestions.length>0 && (
               <div style={{position:'absolute',left:12,right:12,top:'calc(100% - 4px)',background:'#fff',border:'1px solid #10b981',borderRadius:6,boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:20,maxHeight:180,overflowY:'auto'}}>

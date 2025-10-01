@@ -78,9 +78,26 @@ Visit `http://localhost:5173` to access Kflow Studio.
 Core Kflow compiler and language features:
 - **StoryFlow Parser**: Natural language to AST conversion
 - **BPMN Compiler**: Industry-standard workflow compilation
+- **CLI Utilities**: `kflow-export-bpmn` converts IR JSON into BPMN XML
+- **Narrative Extractor**: Convert business analyst briefs into StoryFlow starter stories
 - **AI Autocomplete**: OpenAI-powered intelligent suggestions
 - **Variable Extraction**: Smart template and actor recognition
 - **Type System**: Full TypeScript support
+
+#### AI Provider Configuration
+
+| Variable | Purpose | Applies To | Default |
+| --- | --- | --- | --- |
+| `OPENAI_API_KEY` | OpenAI API key | OpenAI, Azure (fallback) | _required for OpenAI_ |
+| `OPENAI_MODEL` | Override OpenAI model id | OpenAI | `gpt-4o-mini` |
+| `OPENAI_BASE_URL` | Custom API endpoint | OpenAI | OpenAI public API |
+| `AZURE_OPENAI_API_KEY` | Azure OpenAI API key | Azure OpenAI | _required for Azure_ |
+| `AZURE_OPENAI_ENDPOINT` | Azure resource endpoint (`https://...`) | Azure OpenAI | — |
+| `AZURE_OPENAI_DEPLOYMENT` | Deployed model name | Azure OpenAI | — |
+| `AZURE_OPENAI_API_VERSION` | API version query parameter | Azure OpenAI | `2024-05-01-preview` |
+| `KFLOW_AI_PROVIDER` | Provider selector (`openai`, `azure-openai`) | All | `openai` |
+
+Call `resolveNarrativeLLMFromEnv()` to auto-detect the provider, or pass `createOpenAINarrativeLLM()` / `createAzureOpenAINarrativeLLM()` directly into `generateStoryFromNarrative()`.
 
 ### `packages/studio` 
 Visual workflow editor and development environment:
@@ -107,12 +124,17 @@ VS Code extension for professional development:
 - **Complex Branching**: Nested If/Otherwise with proper flow control
 - **Domain Recognition**: HR, E-commerce, Support, Financial workflow patterns
 
-### 🤖 **AI Integration** 
+## 🤖 **AI Integration** 
 - **OpenAI Powered**: GPT-4 driven intelligent suggestions
 - **Context Aware**: Domain-specific workflow recommendations
 - **Fallback Logic**: Rule-based suggestions when AI unavailable
 - **Privacy First**: API keys stored locally, never transmitted
 - **Press Tab**: Get instant AI suggestions anywhere in your workflow
+- **Narrative Extraction**: Set `OPENAI_API_KEY` (or Azure equivalents) and call `createOpenAINarrativeLLM()` / `createAzureOpenAINarrativeLLM()` or simply rely on `resolveNarrativeLLMFromEnv()` to transform requirement briefs into StoryFlow with actor/variable insights
+- **Provider Switch**: Toggle `KFLOW_AI_PROVIDER=openai|azure-openai` plus optional `OPENAI_MODEL`, `AZURE_OPENAI_DEPLOYMENT`, etc. without touching source code
+- **Diagnostics & Escalation**: Use `assessNarrativeEscalation()` to inspect confidence/warnings and escalate low-certainty drafts to human analysts automatically
+- **Roadmap Aligned**: Incremental plan towards multimodal requirement capture, flow synthesis, and BPR insights — see the [AI Integration Strategy](./docs/ai-integration-strategy.md) and the live [AI Roadmap Status](./docs/ai-roadmap-status.md)
+- **Telemetry Hooks**: Use `configureAIAnalytics` to capture suggestion adoption metrics without shipping data by default
 
 ### 📊 **Visual Studio**
 - **Interactive Graphs**: ReactFlow-powered BPMN diagrams
@@ -124,6 +146,9 @@ VS Code extension for professional development:
 ## 📚 **Documentation**
 
 - **[Complete Language Guide](./KflowLanguage.md)** - Full specification with examples
+- **[AI Integration Strategy](./docs/ai-integration-strategy.md)** - Vision, phases, and technical plan for AI-assisted tooling
+- **[AI Roadmap Status](./docs/ai-roadmap-status.md)** - Checklist tracking incremental AI deliverables
+- **[BPMN Export Walkthrough](./docs/bpmn-export-example.md)** - Side-by-side example of Kflow prose and generated BPMN XML
 - **[Examples](./examples/)** - Sample workflows for different domains
 - **[Contributing Guide](./CONTRIBUTING.md)** - How to contribute
 

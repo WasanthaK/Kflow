@@ -5,6 +5,9 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "kflow-export-bpmn": "dist/cli/export-bpmn.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "eslint 'src/**/*.{ts,tsx}'",
@@ -12,6 +15,7 @@
   },
   "dependencies": {
     "ajv": "^8.0.0",
+    "openai": "^4.56.0",
     "yaml": "^2.0.0"
   },
   "devDependencies": {

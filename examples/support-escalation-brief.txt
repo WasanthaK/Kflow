@@ -1,0 +1,7 @@
+Support Brief: Customer success wants to streamline high-priority incident handling across regions.
+When a Priority 1 ticket arrives, capture the customer name, affected product, reported impact, and time detected.
+Assign the case to the primary regional support engineer and notify the customer success manager immediately.
+If the outage affects more than 100 users or a regulated workload, engage the compliance officer and initiate the major-incident bridge.
+Operations must provide a mitigation update every 30 minutes until service is restored.
+If mitigation fails after 90 minutes, escalate to the incident commander and schedule an executive status call.
+Once the incident commander declares recovery, send a postmortem survey to the customer, archive all bridge chat logs, and wait for the postmortem draft before closing the ticket.

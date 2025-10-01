@@ -53,4 +53,48 @@ describe('simulate', () => {
     expect(waiting.status).toBe('waiting');
     expect(waiting.waitingFor).toMatchObject({ type: 'receive', stateId: 'awaitCustomer' });
   });
+
+  it('auto advances wait states when configured', () => {
+    const waitIr: IR = {
+      name: 'Wait Flow',
+      start: 'timer',
+      states: [
+        { id: 'timer', kind: 'wait', delayMs: 5_000, next: 'finish' },
+        { id: 'finish', kind: 'stop', reason: 'Done' },
+      ],
+    };
+
+    const result = simulate(waitIr, { autoAdvanceWaits: true });
+
+    expect(result.status).toBe('stopped');
+    expect(result.visited).toEqual(['timer', 'finish']);
+    expect(result.log).toEqual([
+      { type: 'wait', id: 'timer', delayMs: 5_000, until: undefined },
+      { type: 'stop', id: 'finish', reason: 'Done' },
+    ]);
+  });
+
+  it('schedules parallel branches and join once', () => {
+    const parallelIr: IR = {
+      name: 'Parallel Flow',
+      start: 'kickoff',
+      states: [
+        { id: 'kickoff', kind: 'task', action: 'Start work', next: 'fanOut' },
+        { id: 'fanOut', kind: 'parallel', branches: ['taskA', 'taskB'], join: 'merge' },
+        { id: 'taskA', kind: 'task', action: 'Do task A', next: 'merge' },
+        { id: 'taskB', kind: 'task', action: 'Do task B', next: 'merge' },
+        { id: 'merge', kind: 'task', action: 'Combine results', next: 'wrap' },
+        { id: 'wrap', kind: 'stop', reason: 'Done' },
+      ],
+    };
+
+    const result = simulate(parallelIr);
+
+    expect(result.status).toBe('stopped');
+    expect(result.visited).toEqual(['kickoff', 'fanOut', 'taskA', 'taskB', 'merge', 'wrap']);
+    const parallelLog = result.log.find(entry => entry.type === 'parallel');
+    expect(parallelLog).toMatchObject({ id: 'fanOut', branches: ['taskA', 'taskB'], join: 'merge' });
+    const mergeOccurrences = result.visited.filter(id => id === 'merge').length;
+    expect(mergeOccurrences).toBe(1);
+  });
 });

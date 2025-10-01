@@ -1,1 +1,2 @@
-export * from './compile';
+export * from './compile.js';
+export * from './narrative.js';
