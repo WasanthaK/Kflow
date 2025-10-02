@@ -45,7 +45,7 @@ Kflow evolves from a syntax-driven workflow DSL into an intelligent operations a
 | 4. BPR Insights | Month 6–7 | Model baseline vs. target state, integrate best practice templates | BPR rule engine, recommendation reports, ROI dashboards |
 | 5. Governance & Scale | Month 7+ | Feedback loops, monitoring, enterprise rollout | Feedback capture system, governance playbook, performance metrics |
 
-> **Current progress:** AI analytics hooks, BPMN export CLI, and an AI-first narrative extractor with OpenAI/Azure providers plus diagnostics tooling are now available in `@kflow/language`, enabling adoption, telemetry capture, and confidence-aware StoryFlow drafts with heuristic fallback.
+> **Current progress:** AI analytics hooks, BPMN export CLI, and an AI-first narrative extractor with OpenAI/Azure providers plus diagnostics tooling are now available in `@kflow/language`, enabling adoption, telemetry capture, and confidence-aware StoryFlow drafts with heuristic fallback. The Studio workspace now ships with an example loader and curated briefs (including `support-escalation-brief.txt`) so analysts can exercise the pipeline without creating data manually, a new `buildClarificationPrompts()` helper raises follow-up questions for low-confidence insights, and all feature commits are signed and flowing through PR #5 for governance review.
 
 ## Technical Architecture Sketch
 - **Ingestion Layer**: APIs for audio, document, and chat sources; queues for asynchronous processing.

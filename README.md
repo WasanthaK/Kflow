@@ -149,6 +149,7 @@ VS Code extension for professional development:
 - **[AI Integration Strategy](./docs/ai-integration-strategy.md)** - Vision, phases, and technical plan for AI-assisted tooling
 - **[AI Roadmap Status](./docs/ai-roadmap-status.md)** - Checklist tracking incremental AI deliverables
 - **[BPMN Export Walkthrough](./docs/bpmn-export-example.md)** - Side-by-side example of Kflow prose and generated BPMN XML
+- **[Worked BPMN Example](./docs/bpmn-worked-example.md)** - End-to-end StoryFlow → IR → BPMN guide with command examples
 - **[Examples](./examples/)** - Sample workflows for different domains
 - **[Contributing Guide](./CONTRIBUTING.md)** - How to contribute
 

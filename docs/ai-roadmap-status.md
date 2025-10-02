@@ -11,9 +11,10 @@ This checklist tracks incremental progress on the AI integration vision describe
 - [x] Surface AI vision in README and contributor docs
 - [x] Instrument repository with AI telemetry scaffolding (`@kflow/language` exports analytics hooks)
 - [x] Document BPMN export CLI and programmatic usage in manuals
-- [ ] Create automated issue labels for AI tasks
+- [x] Create automated issue labels for AI tasks (`AI :: Roadmap`, `AI :: Immediate Win` now available in the repo)
 - [x] Wire narrative insight extraction via AI-first pipeline (OpenAI helper ships with heuristic fallback; accuracy tracking in progress)
 - [x] Ship AI diagnostics and escalation helper to surface confidence and warnings
+- [x] Add Studio example loader plus curated briefs so analysts can test AI extraction end-to-end
 
 ## Phase 0 – Foundations
 - [ ] Select transcription & LLM providers
@@ -28,9 +29,9 @@ This checklist tracks incremental progress on the AI integration vision describe
 - [ ] Add metadata tagging service for captured artefacts
 
 ## Phase 2 – Requirement Intelligence
-- [~] Implement NLP extraction microservice (StoryFlow AI generator now calls OpenAI by default when configured and enriches outputs with actors, intents, and variables)
+- [x] Implement NLP extraction microservice foundations (StoryFlow AI generator now defaults to OpenAI/Azure providers, enriches outputs with actors/intents/variables, and records diagnostics)
 - [ ] Define ontology schema for Kflow concepts
-- [ ] Build analyst clarification chat loops
+- [~] Build analyst clarification chat loops (prototype `buildClarificationPrompts` helper now surfaces follow-up questions; Studio UI wiring still pending)
 
 ## Phase 3 – Flow Generation
 - [ ] Generate IR directly from AI-extracted requirements

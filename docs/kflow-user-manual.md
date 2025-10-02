@@ -92,6 +92,7 @@ Use the `generateStoryFromNarrative` helper to bootstrap StoryFlow code from pla
 ```ts
 import {
   assessNarrativeEscalation,
+  buildClarificationPrompts,
   generateStoryFromNarrative,
   resolveNarrativeLLMFromEnv,
   storyToSimple,
@@ -115,8 +116,9 @@ const result = await generateStoryFromNarrative({
 const { story, insights, confidence, warnings, provider } = result;
 const simple = storyToSimple(story);
 const escalation = assessNarrativeEscalation(result);
+const clarifications = buildClarificationPrompts(result);
 
-console.log({ provider, confidence, warnings, insights, escalation });
+console.log({ provider, confidence, warnings, insights, clarifications, escalation });
 ```
 
 Set the following environment variables to enable AI-powered narrative extraction:
@@ -133,6 +135,8 @@ Set the following environment variables to enable AI-powered narrative extractio
 | `AZURE_OPENAI_API_VERSION` | API version query parameter. | `2024-05-01-preview` |
 
 This produces a StoryFlow script beginning with `Ask requester…`, `Do: verify inventory…`, and a conditional approval branch, giving analysts a structured starting point while preserving the original narrative in version control. The returned `insights` object lists detected actors, intents, and dynamic variables so downstream tools can reason about ownership and data needs. `resolveNarrativeLLMFromEnv()` auto-detects OpenAI or Azure OpenAI credentials (falling back to heuristics when none are present), while `assessNarrativeEscalation()` lets you trigger human review when confidence is low or critical signals are missing.
+
+`buildClarificationPrompts()` consumes the same result payload and surfaces targeted follow-up questions (missing actors, vague variables, low confidence) so analysts can capture clarifications directly in Studio or CLI flows.
 
 ## 6. Exporting to BPMN
 
@@ -243,6 +247,12 @@ pnpm --filter studio dev
 ```
 
 Open `http://localhost:5173` in your browser to edit StoryFlow text side-by-side with the generated BPMN graph.
+
+### Loading example narratives
+
+- Use the **Load from examples…** dropdown in the editor toolbar to pull any brief from the `examples/` directory (e.g., `support-escalation-brief.txt`) directly into the workspace.
+- The newly added support escalation and BA requirement briefs showcase the AI-first extractor—load them, press **Convert**, and inspect the generated SimpleScript plus confidence diagnostics.
+- The existing **Upload Story** button still accepts local files when you want to test external narratives.
 
 ## 9. Best Practices
 

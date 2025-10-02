@@ -14,11 +14,13 @@ The main README promises BPMN 2.0 exports, AI-ready tooling, and in-memory simul
 
 - [x] **Quality gates**
    - Vitest suites run through `pnpm --filter @kflow/language exec vitest run`, keeping the README’s QA claims accurate.
+- [x] **BPMN export tooling surfaced to users**
+   - `kflow-export-bpmn` CLI now documented in the user manual with end-to-end usage notes, matching README promises.
+- [x] **Simulator usage guide published**
+   - User manual includes a dedicated section on `simulate`, branch hints, event queues, and wait handling.
 
 ## 🔄 Upcoming Enhancements
 
-- [ ] Expand documentation with worked examples that show the BPMN XML output alongside the original Kflow prose.
-- [ ] Add CLI command or studio action to export BPMN XML directly from authored flows.
-- [ ] Publish simulator usage guide in the user manual, including guidance for providing choice hints and events.
+- [x] Expand documentation with worked examples that show the BPMN XML output alongside the original Kflow prose (`docs/bpmn-worked-example.md`).
 
 Contributors can pick up any unchecked item to keep the README aligned with shipped capabilities.
