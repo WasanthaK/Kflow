@@ -15,7 +15,8 @@
     "openai": "^4.104.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
-    "reactflow": "^11.11.4"
+    "reactflow": "^11.11.4",
+    "yaml": "^2.3.4"
   },
   "devDependencies": {
     "@types/react": "^18.0.0",
