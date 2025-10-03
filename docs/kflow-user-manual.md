@@ -254,6 +254,12 @@ Open `http://localhost:5173` in your browser to edit StoryFlow text side-by-side
 - The newly added support escalation and BA requirement briefs showcase the AI-first extractor—load them, press **Convert**, and inspect the generated SimpleScript plus confidence diagnostics.
 - The existing **Upload Story** button still accepts local files when you want to test external narratives.
 
+### Analyst clarifications panel
+
+- Every time the story changes, Studio now runs the new `buildClarificationPrompts` helper locally and surfaces the follow-up questions in a sidecard below the editor.
+- Severity badges (`info`, `warning`, `critical`) call attention to missing actors, unclear variables, or low-confidence branches so analysts can tighten requirements before handing them to engineering.
+- The panel summarizes detected actors and variables and shows the calculated confidence score so you can prioritize which clarifications to tackle first.
+
 ## 9. Best Practices
 
 - Keep sentences action-oriented and present tense.
