@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useRef } from 'react';
+import Editor from '@monaco-editor/react';
 
 interface SyntaxHighlightedEditorProps {
   value: string;
@@ -17,158 +18,95 @@ const SyntaxHighlightedEditor: React.FC<SyntaxHighlightedEditorProps> = ({
   aiEnabled = false,
   style = {}
 }) => {
-  const [highlightedContent, setHighlightedContent] = useState('');
+  const editorRef = useRef(null);
 
-  // Kflow-specific syntax rules with inline styles
-  const syntaxRules = [
-    // Kflow verbs - highest priority
-    { pattern: /^(Ask)\b/gm, style: 'color: #3b82f6; font-weight: 700;', type: 'ask' },
-    { pattern: /^(Do:?)\b/gm, style: 'color: #10b981; font-weight: 700;', type: 'do' },
-    { pattern: /^(Send)\b/gm, style: 'color: #ef4444; font-weight: 700;', type: 'send' },
-    { pattern: /^(Wait)\b/gm, style: 'color: #6b7280; font-weight: 700;', type: 'wait' },
-    { pattern: /^(Stop)\b/gm, style: 'color: #dc2626; font-weight: 700;', type: 'stop' },
-    { pattern: /^(Receive)\b/gm, style: 'color: #8b5cf6; font-weight: 700;', type: 'receive' },
-    { pattern: /^(If)\b/gm, style: 'color: #f59e0b; font-weight: 700;', type: 'if' },
-    { pattern: /^(Otherwise)\b/gm, style: 'color: #f59e0b; font-weight: 700;', type: 'otherwise' },
-    { pattern: /^(Flow:)\s*(.+)$/gm, style: 'color: #8b5cf6; font-weight: 700;', type: 'flow', captureTitle: true },
-    // Variables in {braces}
-    { pattern: /\{([^}]+)\}/g, style: 'color: #8b5cf6; font-weight: 600; background: rgba(139, 92, 246, 0.1); padding: 1px 4px; border-radius: 3px;', type: 'variable' },
-    // Comments
-    { pattern: /#.*$/gm, style: 'color: #6b7280; font-style: italic;', type: 'comment' },
-    // Numbers
-    { pattern: /\b\d+(\.\d+)?\b/g, style: 'color: #0ea5e9; font-weight: 600;', type: 'number' }
-  ];
+  const handleEditorDidMount = (editor: any, monaco: any) => {
+    editorRef.current = editor;
 
-  // Add dynamic actor patterns from detected actors
-  const actorPatterns = actors.map(actor => ({
-    pattern: new RegExp(`\\b${actor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'),
-    style: 'color: #0ea5e9; font-weight: 600; background: rgba(14, 165, 233, 0.1); padding: 1px 4px; border-radius: 3px;',
-    type: 'detected-actor'
-  }));
+    // Register custom language for Kflow
+    monaco.languages.register({ id: 'kflow' });
 
-  const allRules = [...syntaxRules, ...actorPatterns];
-
-  const highlightSyntax = useCallback((text: string) => {
-    if (!text) return '';
-
-    // Process line by line to handle Flow: and line-start patterns correctly
-    return text.split('\n').map(line => {
-      let result = line;
-      
-      // Handle Flow: specially
-      if (/^Flow:/i.test(line)) {
-        return line.replace(/^(Flow:)\s*(.+)$/i, '<span style="color: #8b5cf6; font-weight: 700;">$1</span> <span style="color: #0ea5e9; font-weight: 600;">$2</span>');
-      }
-
-      // Handle line-start verbs
-      if (/^(Ask|Do:?|Send|Wait|Stop|Receive|If|Otherwise)\b/i.test(line)) {
-        const verbMatch = line.match(/^(Ask|Do:?|Send|Wait|Stop|Receive|If|Otherwise)\b/i);
-        if (verbMatch) {
-          const verb = verbMatch[1];
-          const rest = line.substring(verb.length);
+    // Define tokens for Kflow syntax
+    monaco.languages.setMonarchTokensProvider('kflow', {
+      tokenizer: {
+        root: [
+          // Flow declaration
+          [/^Flow:/, 'keyword.flow'],
           
-          let verbColor = '#10b981';
-          if (verb.toLowerCase() === 'ask') verbColor = '#3b82f6';
-          else if (verb.toLowerCase() === 'send') verbColor = '#ef4444';
-          else if (verb.toLowerCase() === 'wait') verbColor = '#6b7280';
-          else if (verb.toLowerCase() === 'stop') verbColor = '#dc2626';
-          else if (verb.toLowerCase() === 'receive') verbColor = '#8b5cf6';
-          else if (verb.toLowerCase() === 'if' || verb.toLowerCase() === 'otherwise') verbColor = '#f59e0b';
+          // Verbs at start of line
+          [/^Ask\b/, 'keyword.ask'],
+          [/^Do:?\b/, 'keyword.do'],
+          [/^Send\b/, 'keyword.send'],
+          [/^Wait\b/, 'keyword.wait'],
+          [/^Stop\b/, 'keyword.stop'],
+          [/^Receive\b/, 'keyword.receive'],
+          [/^If\b/, 'keyword.control'],
+          [/^Otherwise\b/, 'keyword.control'],
           
-          result = `<span style="color: ${verbColor}; font-weight: 700;">${verb}</span>${rest}`;
-        }
+          // Variables in braces
+          [/\{[^}]+\}/, 'variable'],
+          
+          // Actors (dynamically added from props)
+          ...actors.map(actor => [new RegExp(`\\b${actor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'), 'type.identifier']),
+          
+          // Comments
+          [/#.*$/, 'comment'],
+          
+          // Numbers
+          [/\b\d+(\.\d+)?\b/, 'number'],
+        ]
       }
+    });
 
-      // Highlight variables {variable}
-      result = result.replace(
-        /\{([^}]+)\}/g,
-        '<span style="color: #8b5cf6; font-weight: 600; background: rgba(139, 92, 246, 0.1); padding: 1px 4px; border-radius: 3px;">{$1}</span>'
-      );
-
-      // Highlight actors (detected from insights)
-      actors.forEach(actor => {
-        const pattern = new RegExp(`\\b(${actor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\b`, 'gi');
-        result = result.replace(
-          pattern,
-          '<span style="color: #0ea5e9; font-weight: 600; background: rgba(14, 165, 233, 0.1); padding: 1px 4px; border-radius: 3px;">$1</span>'
-        );
-      });
-
-      // Highlight comments
-      if (/^\s*#/.test(result)) {
-        result = `<span style="color: #6b7280; font-style: italic;">${result}</span>`;
+    // Define colors for tokens
+    monaco.editor.defineTheme('kflowTheme', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'keyword.flow', foreground: '8b5cf6', fontStyle: 'bold' },
+        { token: 'keyword.ask', foreground: '3b82f6', fontStyle: 'bold' },
+        { token: 'keyword.do', foreground: '10b981', fontStyle: 'bold' },
+        { token: 'keyword.send', foreground: 'ef4444', fontStyle: 'bold' },
+        { token: 'keyword.wait', foreground: '6b7280', fontStyle: 'bold' },
+        { token: 'keyword.stop', foreground: 'dc2626', fontStyle: 'bold' },
+        { token: 'keyword.receive', foreground: '8b5cf6', fontStyle: 'bold' },
+        { token: 'keyword.control', foreground: 'f59e0b', fontStyle: 'bold' },
+        { token: 'variable', foreground: '8b5cf6', fontStyle: 'bold' },
+        { token: 'type.identifier', foreground: '0ea5e9', fontStyle: 'bold' },
+        { token: 'comment', foreground: '6b7280', fontStyle: 'italic' },
+        { token: 'number', foreground: '0ea5e9', fontStyle: 'bold' },
+      ],
+      colors: {
+        'editor.background': aiEnabled ? '#f0fdf4' : '#ffffff',
       }
+    });
 
-      // Highlight numbers
-      result = result.replace(
-        /\b(\d+(?:\.\d+)?)\b/g,
-        '<span style="color: #0ea5e9; font-weight: 600;">$1</span>'
-      );
+    monaco.editor.setTheme('kflowTheme');
+  };
 
-      return result;
-    }).join('\n');
-  }, [actors]);
-
-  useEffect(() => {
-    setHighlightedContent(highlightSyntax(value));
-  }, [value, highlightSyntax]);
+  const handleEditorChange = (value: string | undefined) => {
+    onChange(value || '');
+  };
 
   return (
-    <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', ...style }}>
-      {/* Syntax Highlighted Display */}
-      <div 
-        style={{
-          position: 'absolute',
-          inset: 0,
-          padding: 12,
-          fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-          fontSize: 14,
-          lineHeight: 1.6,
-          pointerEvents: 'none',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-          overflowY: 'hidden',
-          color: 'transparent',
-          zIndex: 1
-        }}
-        dangerouslySetInnerHTML={{ __html: highlightedContent }}
-      />
-      
-      {/* Actual Textarea */}
-      <textarea
+    <div style={{ flex: 1, minHeight: 0, margin: 12, border: `2px solid ${aiEnabled ? '#10b981' : '#e5e7eb'}`, borderRadius: 6, overflow: 'hidden', ...style }}>
+      <Editor
+        height="100%"
+        defaultLanguage="kflow"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        style={{ 
-          position: 'relative',
-          width: '100%',
-          height: '100%',
-          padding: 12,
-          fontFamily: 'Monaco, Consolas, "Courier New", monospace',
+        onChange={handleEditorChange}
+        onMount={handleEditorDidMount}
+        options={{
+          minimap: { enabled: false },
           fontSize: 14,
-          lineHeight: 1.6,
-          background: aiEnabled ? 'rgba(240, 253, 244, 0.3)' : 'rgba(255, 255, 255, 0.3)',
-          resize: 'none',
-          outline: 'none',
-          border: `2px solid ${aiEnabled ? '#10b981' : '#e5e7eb'}`,
-          borderRadius: 6,
-          margin: 12,
-          color: 'rgba(0, 0, 0, 0.01)', // Nearly transparent for text but cursor visible
-          caretColor: '#000',
-          zIndex: 2
+          lineNumbers: 'on',
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+          wordWrap: 'on',
+          fontFamily: '"Cascadia Code", "Fira Code", Monaco, Consolas, "Courier New", monospace',
+          fontLigatures: true,
+          tabSize: 2,
         }}
-        placeholder={`Flow: Your Workflow Name
-
-Ask {actor} for {information}
-Do: {action} {object}
-If {condition}
-  Do: {consequent_action}
-Otherwise
-  Do: {alternative_action}
-Send {message} to {recipient}
-Wait for {event}
-Stop`}
-        spellCheck={false}
       />
     </div>
   );
