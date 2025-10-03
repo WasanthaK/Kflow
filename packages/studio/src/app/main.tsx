@@ -11,6 +11,7 @@ import { normalizeStoryAsset, type KStory, type NormalizeOptions } from './kstor
 import { WorkflowGraph } from '../components/WorkflowGraph';
 import { storySamples, DEFAULT_SAMPLE_ID, getSampleById } from './samples';
 import type { NarrativeInsights, NarrativeVariableOrigin } from '../../../language/src/storyflow/narrative.js';
+import SyntaxHighlightedEditor from '../components/SyntaxHighlightedEditor';
 
 const CUSTOM_SAMPLE_ID = 'custom';
 const DEFAULT_STORY = getSampleById(DEFAULT_SAMPLE_ID)?.content ?? `Flow: Advanced Order Processing System
@@ -979,8 +980,14 @@ export function App() {
           )}
           <div style={{flex:1,position:'relative',display:'flex',flexDirection:'column',minHeight:0}}>
             <input ref={fileInputRef} type="file" accept=".txt,.story,.md,.yaml,.yml,.json,.kstory" style={{display:'none'}} onChange={handleFileChange} />
-            <textarea ref={textareaRef} value={story} onChange={handleStoryChange} onKeyDown={handleTextareaKeyDown} style={{flex:1,minHeight:0,border:`2px solid ${aiEnabled?'#10b981':'#e5e7eb'}`,margin:12,borderRadius:6,padding:12,fontFamily:'Monaco, monospace',fontSize:14,resize:'none',background:aiEnabled?'#f0fdf4':'#fff'}} />
-            {aiEnabled && <div style={{position:'absolute',top:14,right:20,background:'#10b981',color:'#fff',padding:'2px 6px',fontSize:10,borderRadius:3,fontWeight:600}}>AI ON</div>}
+            <SyntaxHighlightedEditor
+              value={story}
+              onChange={applyStoryText}
+              onKeyDown={handleTextareaKeyDown}
+              actors={clarifications.insights.actors}
+              aiEnabled={aiEnabled}
+            />
+            {aiEnabled && <div style={{position:'absolute',top:14,right:20,background:'#10b981',color:'#fff',padding:'2px 6px',fontSize:10,borderRadius:3,fontWeight:600,zIndex:10}}>AI ON</div>}
             {showSuggestions && suggestions.length>0 && (
               <div style={{position:'absolute',left:12,right:12,top:'calc(100% - 4px)',background:'#fff',border:'1px solid #10b981',borderRadius:6,boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:20,maxHeight:180,overflowY:'auto'}}>
                 <div style={{padding:6,fontSize:11,fontWeight:600,background:'#f0fdf4',color:'#059669'}}>AI Suggestions</div>
