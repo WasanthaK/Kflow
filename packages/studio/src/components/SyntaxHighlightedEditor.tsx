@@ -1,144 +1,113 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef } from 'react';
+import Editor from '@monaco-editor/react';
 
 interface SyntaxHighlightedEditorProps {
   value: string;
   onChange: (value: string) => void;
-  actors: string[];
-  className?: string;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  actors?: string[];
+  aiEnabled?: boolean;
+  style?: React.CSSProperties;
 }
 
 const SyntaxHighlightedEditor: React.FC<SyntaxHighlightedEditorProps> = ({
   value,
   onChange,
-  actors,
-  className = ''
+  onKeyDown,
+  actors = [],
+  aiEnabled = false,
+  style = {}
 }) => {
-  const [highlightedContent, setHighlightedContent] = useState('');
+  const editorRef = useRef(null);
 
-  const syntaxRules = [
-    { pattern: /\b(task|action|step|do|execute|perform|run)\b/gi, class: 'text-blue-600 font-semibold', type: 'action' },
-    { pattern: /\b(if|else|otherwise|when|unless|condition|check)\b/gi, class: 'text-purple-600 font-semibold', type: 'condition' },
-    { pattern: /\b(start|begin|end|finish|complete|terminate)\b/gi, class: 'text-green-600 font-semibold', type: 'event' },
-    { pattern: /\b(wait|delay|timer|timeout|schedule)\b/gi, class: 'text-orange-600 font-semibold', type: 'timer' },
-    { pattern: /\b(send|email|notify|message|alert|inform)\b/gi, class: 'text-indigo-600 font-semibold', type: 'message' },
-    { pattern: /\b(user|customer|client|manager|admin|system|service|agent)\b/gi, class: 'text-red-600 font-semibold', type: 'actor' },
-    { pattern: /\b(approve|approval|review|verify|validate|confirm)\b/gi, class: 'text-teal-600 font-semibold', type: 'approval' },
-    { pattern: /\b(gateway|decision|branch|split|merge|join)\b/gi, class: 'text-pink-600 font-semibold', type: 'gateway' },
-    { pattern: /\b(process|calculate|compute|generate|create|update|delete)\b/gi, class: 'text-cyan-600 font-semibold', type: 'process' },
-    // String literals
-    { pattern: /"([^"\\]|\\.)*"/g, class: 'text-green-700', type: 'string' },
-    { pattern: /'([^'\\]|\\.)*'/g, class: 'text-green-700', type: 'string' },
-    // Numbers
-    { pattern: /\b\d+(\.\d+)?\b/g, class: 'text-blue-700', type: 'number' },
-    // Comments
-    { pattern: /#.*$/gm, class: 'text-gray-500 italic', type: 'comment' },
-    { pattern: /\/\/.*$/gm, class: 'text-gray-500 italic', type: 'comment' }
-  ];
+  const handleEditorDidMount = (editor: any, monaco: any) => {
+    editorRef.current = editor;
 
-  // Add dynamic actor patterns
-  const actorPatterns = actors.map(actor => ({
-    pattern: new RegExp(`\\b${actor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'),
-    class: 'text-red-600 font-semibold bg-red-50 px-1 rounded',
-    type: 'detected-actor'
-  }));
+    // Register custom language for Kflow
+    monaco.languages.register({ id: 'kflow' });
 
-  const allRules = [...syntaxRules, ...actorPatterns];
-
-  useEffect(() => {
-    const highlightSyntax = (text: string) => {
-      let highlighted = text;
-      const replacements: Array<{ start: number; end: number; replacement: string; priority: number }> = [];
-
-      allRules.forEach((rule, ruleIndex) => {
-        const matches = [...text.matchAll(rule.pattern)];
-        matches.forEach(match => {
-          if (match.index !== undefined) {
-            replacements.push({
-              start: match.index,
-              end: match.index + match[0].length,
-              replacement: `<span class="${rule.class}" data-type="${rule.type}">${match[0]}</span>`,
-              priority: rule.type === 'detected-actor' ? 100 : ruleIndex
-            });
-          }
-        });
-      });
-
-      // Sort by position (reverse) and priority to handle overlaps
-      replacements.sort((a, b) => {
-        if (a.start !== b.start) return b.start - a.start;
-        return b.priority - a.priority;
-      });
-
-      // Apply replacements without overlapping
-      const applied = new Set<string>();
-      replacements.forEach(replacement => {
-        const key = `${replacement.start}-${replacement.end}`;
-        if (!applied.has(key)) {
-          const overlapping = Array.from(applied).some(appliedKey => {
-            const [aStart, aEnd] = appliedKey.split('-').map(Number);
-            return !(replacement.end <= aStart || replacement.start >= aEnd);
-          });
+    // Define tokens for Kflow syntax
+    monaco.languages.setMonarchTokensProvider('kflow', {
+      tokenizer: {
+        root: [
+          // Flow declaration
+          [/^Flow:/, 'keyword.flow'],
           
-          if (!overlapping) {
-            highlighted = highlighted.substring(0, replacement.start) + 
-                         replacement.replacement + 
-                         highlighted.substring(replacement.end);
-            applied.add(key);
-          }
-        }
-      });
+          // Verbs at start of line
+          [/^Ask\b/, 'keyword.ask'],
+          [/^Do:?\b/, 'keyword.do'],
+          [/^Send\b/, 'keyword.send'],
+          [/^Wait\b/, 'keyword.wait'],
+          [/^Stop\b/, 'keyword.stop'],
+          [/^Receive\b/, 'keyword.receive'],
+          [/^If\b/, 'keyword.control'],
+          [/^Otherwise\b/, 'keyword.control'],
+          
+          // Variables in braces
+          [/\{[^}]+\}/, 'variable'],
+          
+          // Actors (dynamically added from props)
+          ...actors.map(actor => [new RegExp(`\\b${actor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'), 'type.identifier']),
+          
+          // Comments
+          [/#.*$/, 'comment'],
+          
+          // Numbers
+          [/\b\d+(\.\d+)?\b/, 'number'],
+        ]
+      }
+    });
 
-      return highlighted;
-    };
+    // Define colors for tokens
+    monaco.editor.defineTheme('kflowTheme', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'keyword.flow', foreground: '8b5cf6', fontStyle: 'bold' },
+        { token: 'keyword.ask', foreground: '3b82f6', fontStyle: 'bold' },
+        { token: 'keyword.do', foreground: '10b981', fontStyle: 'bold' },
+        { token: 'keyword.send', foreground: 'ef4444', fontStyle: 'bold' },
+        { token: 'keyword.wait', foreground: '6b7280', fontStyle: 'bold' },
+        { token: 'keyword.stop', foreground: 'dc2626', fontStyle: 'bold' },
+        { token: 'keyword.receive', foreground: '8b5cf6', fontStyle: 'bold' },
+        { token: 'keyword.control', foreground: 'f59e0b', fontStyle: 'bold' },
+        { token: 'variable', foreground: '8b5cf6', fontStyle: 'bold' },
+        { token: 'type.identifier', foreground: '0ea5e9', fontStyle: 'bold' },
+        { token: 'comment', foreground: '6b7280', fontStyle: 'italic' },
+        { token: 'number', foreground: '0ea5e9', fontStyle: 'bold' },
+      ],
+      colors: {
+        'editor.background': aiEnabled ? '#f0fdf4' : '#ffffff',
+      }
+    });
 
-    setHighlightedContent(highlightSyntax(value));
-  }, [value, actors]);
+    monaco.editor.setTheme('kflowTheme');
+  };
+
+  const handleEditorChange = (value: string | undefined) => {
+    onChange(value || '');
+  };
 
   return (
-    <div className={`relative ${className}`}>
-      {/* Syntax Highlighted Display */}
-      <div 
-        className="absolute inset-0 p-3 font-mono text-sm leading-6 pointer-events-none whitespace-pre-wrap break-words overflow-hidden"
-        dangerouslySetInnerHTML={{ __html: highlightedContent }}
-        style={{ color: 'transparent' }}
-      />
-      
-      {/* Actual Textarea */}
-      <textarea
+    <div style={{ flex: 1, minHeight: 0, margin: 12, border: `2px solid ${aiEnabled ? '#10b981' : '#e5e7eb'}`, borderRadius: 6, overflow: 'hidden', ...style }}>
+      <Editor
+        height="100%"
+        defaultLanguage="kflow"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="relative w-full h-full p-3 font-mono text-sm leading-6 bg-transparent resize-none outline-none border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-        style={{ 
-          color: 'rgba(0,0,0,0.01)', // Nearly transparent but not completely for cursor visibility
-          caretColor: '#000'  // Visible cursor
+        onChange={handleEditorChange}
+        onMount={handleEditorDidMount}
+        options={{
+          minimap: { enabled: false },
+          fontSize: 14,
+          lineNumbers: 'on',
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+          wordWrap: 'on',
+          fontFamily: '"Cascadia Code", "Fira Code", Monaco, Consolas, "Courier New", monospace',
+          fontLigatures: true,
+          tabSize: 2,
         }}
-        placeholder="Enter your workflow definition here...
-
-Example:
-task: customer provides order details
-if order_total > 1000
-  task: manager approval required
-  if manager_approved
-    service: process payment via gateway
-  else
-    message: send rejection email
-else
-  service: process standard payment
-end"
-        spellCheck={false}
       />
-
-      {/* Syntax Legend */}
-      <div className="absolute top-2 right-2 bg-white bg-opacity-90 rounded p-2 text-xs border shadow-sm">
-        <div className="font-semibold mb-1">Syntax Colors:</div>
-        <div className="space-y-1">
-          <div><span className="text-blue-600">●</span> Actions</div>
-          <div><span className="text-purple-600">●</span> Conditions</div>
-          <div><span className="text-red-600">●</span> Actors</div>
-          <div><span className="text-green-600">●</span> Events</div>
-          <div><span className="text-orange-600">●</span> Timers</div>
-        </div>
-      </div>
     </div>
   );
 };
