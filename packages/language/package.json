@@ -21,6 +21,7 @@
   "devDependencies": {
     "typescript": "^5.5.0",
     "vitest": "^1.5.0",
-    "eslint": "^9.0.0"
+    "eslint": "^9.0.0",
+    "bpmn-moddle": "^9.0.3"
   }
 }

@@ -54,6 +54,36 @@ describe('simulate', () => {
     expect(waiting.waitingFor).toMatchObject({ type: 'receive', stateId: 'awaitCustomer' });
   });
 
+  it('selects case branches using hint values', () => {
+    const caseIr: IR = {
+      name: 'Case Router',
+      start: 'route',
+      states: [
+        {
+          id: 'route',
+          kind: 'case',
+          expression: '{severity}',
+          cases: [
+            { value: 'low', next: 'selfServe' },
+            { value: 'high', next: 'escalate' },
+          ],
+          default: 'fallback',
+        },
+        { id: 'selfServe', kind: 'task', action: 'Send knowledge base article', next: 'close' },
+        { id: 'escalate', kind: 'task', action: 'Engage escalation team', next: 'close' },
+        { id: 'fallback', kind: 'task', action: 'Create support ticket', next: 'close' },
+        { id: 'close', kind: 'stop', reason: 'Complete' },
+      ],
+    };
+
+    const result = simulate(caseIr, { choices: { route: 'high' } });
+
+    expect(result.status).toBe('stopped');
+    expect(result.visited).toEqual(['route', 'escalate', 'close']);
+    const caseLog = result.log.find(entry => entry.type === 'case');
+    expect(caseLog).toMatchObject({ id: 'route', expression: '{severity}', matched: 'high' });
+  });
+
   it('auto advances wait states when configured', () => {
     const waitIr: IR = {
       name: 'Wait Flow',

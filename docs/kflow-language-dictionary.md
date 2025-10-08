@@ -23,8 +23,8 @@ This dictionary catalogs the domain vocabulary, syntax keywords, and semantic co
 | `Do:` (rules verbs) | When followed by verbs such as `evaluate`, `determine`, or `classify`, maps to a business rule task. | Business Rule Task (`rule_evaluation`)
 | `Do:` (generic) | Any other `Do` statement is preserved as a generic task for downstream tooling. | Task (unspecified)
 | `Send` | Creates a message task. The compiler detects common channels (email, notification, SMS, Slack) to label the message type. | Message Task (`send`)
-| `Receive` | Marks a waiting state that resumes when a matching external event name is supplied to the simulator. | Intermediate Catch Event (`receive`)
-| `Wait` | Introduces an explicit timer wait. Simulation can either pause or auto-advance depending on configuration. | Timer Event (`wait`)
+| `Receive` | Marks a waiting state that resumes when a matching external event name is supplied to the simulator. | Intermediate Message Catch Event (`message`)
+| `Wait` | Introduces an explicit timer wait. Simulation can either pause or auto-advance depending on configuration. | Intermediate Timer Catch Event (`timer`)
 | `Stop` | Signals the end of the workflow. | Terminate End Event
 | `Remember` | Any line that does not match the patterns above becomes a note stored in the compilation result. | `Remember to sync with finance`
 
@@ -34,6 +34,7 @@ This dictionary catalogs the domain vocabulary, syntax keywords, and semantic co
 | --- | --- |
 | `If` | Starts a conditional branch. The expression following `If` becomes the branch condition. |
 | `Otherwise` | Defines the alternate path when the preceding `If` condition is not met. Only one `Otherwise` is supported per `If` block. |
+| `Case` / `Switch` | Evaluates an expression against multiple values. Each matching value jumps to a named step; an optional default path handles fall-through. |
 | Nested `If` | `If` statements can appear inside an indented block to model nested conditions. |
 
 ## Variable and Entity Detection
@@ -74,6 +75,7 @@ The simulator walks the compiled IR graph with deterministic rules:
 - `Ask`, `Do`, `Send`, and `Receive` states push entries to the simulation log and enqueue the next state.
 - `Wait` either pauses execution (default) or advances automatically when `autoAdvanceWaits` is enabled.
 - `Choice` nodes select a branch based on provided hints or fall back to the first branch.
+- `Case` nodes mirror `Choice` but match against explicit values; simulator uses the same hint map.
 - `Parallel` nodes enqueue every branch plus a join target.
 - `Stop` ends the run and marks the simulation status as `stopped`.
 
