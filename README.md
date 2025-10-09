@@ -122,6 +122,7 @@ VS Code extension for professional development:
 - **Smart Actor Detection**: Automatically identifies managers, customers, systems
 - **BPMN Task Types**: User, Service, Script, Business Rule, Message, Wait tasks
 - **Complex Branching**: Nested If/Otherwise with proper flow control
+- **Case/Switch Branching**: Multi-way routing with default fallbacks mapped to exclusive gateways
 - **Domain Recognition**: HR, E-commerce, Support, Financial workflow patterns
 
 ## 🤖 **AI Integration** 
@@ -150,8 +151,17 @@ VS Code extension for professional development:
 - **[AI Roadmap Status](./docs/ai-roadmap-status.md)** - Checklist tracking incremental AI deliverables
 - **[BPMN Export Walkthrough](./docs/bpmn-export-example.md)** - Side-by-side example of Kflow prose and generated BPMN XML
 - **[Worked BPMN Example](./docs/bpmn-worked-example.md)** - End-to-end StoryFlow → IR → BPMN guide with command examples
+- **[BPMN Integration Guide](./docs/BPMN_INTEGRATION.md)** - Compiler guarantees, validation steps, and troubleshooting
 - **[Examples](./examples/)** - Sample workflows for different domains
 - **[Contributing Guide](./CONTRIBUTING.md)** - How to contribute
+
+### BPMN compliance quick-check
+
+1. Run `pnpm --filter @kflow/language test` to validate BPMN output with `bpmn-moddle`.
+2. Use `npx kflow-export-bpmn` to generate XML for your IR and import it into Camunda Modeler or bpmn.io.
+
+The compiler automatically adds lane sets, DI shapes, case gateways, and an optional `isExecutable` flag (`ir.metadata.executable`) so exported files load cleanly in standard BPMN tools without manual touch-ups.
+3. Review the [BPMN Integration Guide](./docs/BPMN_INTEGRATION.md) for mappings and troubleshooting tips.
 
 ## 🏆 **Production Ready**
 

@@ -22,5 +22,9 @@ The main README promises BPMN 2.0 exports, AI-ready tooling, and in-memory simul
 ## 🔄 Upcoming Enhancements
 
 - [x] Expand documentation with worked examples that show the BPMN XML output alongside the original Kflow prose (`docs/bpmn-worked-example.md`).
+- [x] Tighten BPMN compliance: default-branch wiring, parallel joins, terminate end events, timers, and message catches all land with regression coverage (see `docs/bpmn-compliance-plan.md`).
+- [x] Add automated BPMN validation (moddle parse or schema check) to the CI story so README claims stay truthful.
+- [x] Document the BPMN compliance remediation plan in `BPMN_INTEGRATION.md` and surface a quick-start checklist in the README.
+- [x] Introduce `Case`/`Switch` syntax plus lane/DI/executable enhancements, and reflect the capabilities in the README + manuals.
 
 Contributors can pick up any unchecked item to keep the README aligned with shipped capabilities.

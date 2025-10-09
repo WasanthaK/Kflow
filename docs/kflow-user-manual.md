@@ -156,6 +156,21 @@ const xml = irToBpmnXml(sampleExpenseReimbursementIr);
 console.log(xml);
 ```
 
+### What the exporter guarantees
+
+- Exclusive gateways carry BPMN-compliant `default` attributes (no `bpmn:isDefault` on flows).
+- Parallel blocks emit both split and join gateways so branches synchronise correctly.
+- `Stop` states produce terminate end events (`<bpmn:terminateEventDefinition/>`).
+- `Wait` steps become intermediate timer catch events with either `<bpmn:timeDate>` or `<bpmn:timeDuration>`.
+- `Receive` steps render as intermediate message catch events.
+- Lanes are generated automatically from metadata, per-state hints, and actor heuristics and appear under `<bpmn:laneSet>` with populated `flowNodeRef` entries.
+- A minimal `bpmndi:BPMNDiagram` section includes lane, node, and edge shapes so XML renders immediately in Camunda Modeler or bpmn.io.
+- `Case` states map to exclusive gateways with condition expressions, giving you multi-way routing without nested `If` blocks.
+- `ir.metadata.executable` toggles the process `isExecutable` flag when downstream automation requires it.
+- The BPMN XML is validated in tests with `bpmn-moddle`; run `pnpm --filter @kflow/language test` to verify locally.
+
+Use `ir.metadata.lanes` to pre-register lane ids and display names, and set `lane` on individual states when you need precise placement. When omitted, the compiler falls back to defaults such as `System Automation`, `Control Flow`, `External Partners`, and `Timers`.
+
 ## 7. Simulating a Flow
 
 Import the `simulate` function to execute the compiled intermediate representation (IR):
@@ -199,6 +214,8 @@ Simulation returns:
 - `messages`: outbound communications emitted via `Send` states.
 - `status`: `completed`, `waiting`, or `stopped` when a `Stop` state is reached.
 - `waitingFor`: details about the state that paused execution (receive or wait).
+
+`case` states behave like `choice` but compare an expression to explicit values. Provide the desired value through the `choices` hint map (by value or target state id) to steer the simulation deterministically.
 
 ### Simulation Options
 

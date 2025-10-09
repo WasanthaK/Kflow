@@ -14,6 +14,7 @@ export type SimulationLogEntry =
   | { type: 'receive'; id: string; event: string }
   | { type: 'wait'; id: string; until?: string; delayMs?: number }
   | { type: 'choice'; id: string; selected: string }
+  | { type: 'case'; id: string; expression: string; matched: string }
   | { type: 'parallel'; id: string; branches: string[]; join?: string }
   | { type: 'stop'; id: string; reason?: string };
 
@@ -101,6 +102,12 @@ export function simulate(ir: IR, options: SimulationOptions = {}): SimulationRes
         enqueueNext(chosen.next);
         break;
       }
+      case 'case': {
+        const matched = selectCase(state, options.choices);
+        log.push({ type: 'case', id: state.id, expression: state.expression, matched: matched.value ?? matched.next });
+        enqueueNext(matched.next);
+        break;
+      }
       case 'parallel':
         log.push({ type: 'parallel', id: state.id, branches: [...state.branches], join: state.join });
         for (const branch of state.branches) {
@@ -156,6 +163,25 @@ function selectChoice(state: Extract<IRState, { kind: 'choice' }>, choices?: Rec
   if (fallback) return fallback;
   if (state.otherwise) return { cond: 'otherwise', next: state.otherwise };
   throw new Error(`Choice state "${state.id}" has no branches`);
+}
+
+function selectCase(state: Extract<IRState, { kind: 'case' }>, choices?: Record<string, string>) {
+  if (choices) {
+    const hinted = choices[state.id];
+    if (hinted) {
+      const matched = state.cases.find(entry => entry.next === hinted || entry.value === hinted);
+      if (matched) {
+        return matched;
+      }
+      if (state.default) {
+        return { value: 'default', next: state.default };
+      }
+    }
+  }
+  const fallback = state.cases[0];
+  if (fallback) return fallback;
+  if (state.default) return { value: 'default', next: state.default };
+  throw new Error(`Case state "${state.id}" has no cases`);
 }
 
 function exhaustive(_: never): never {
