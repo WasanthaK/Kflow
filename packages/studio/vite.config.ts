@@ -26,5 +26,9 @@ export default defineConfig({
   esbuild: {
     drop: ['console', 'debugger']
   },
-  publicDir: '../examples'
+  publicDir: '../examples',
+  test: {
+    environment: 'jsdom',
+    globals: true,
+  }
 });

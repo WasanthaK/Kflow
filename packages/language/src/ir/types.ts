@@ -29,7 +29,15 @@ export type IRState =
   | (BaseState & { kind: 'choice'; branches: ChoiceBranch[]; otherwise?: string })
   | (BaseState & { kind: 'case'; expression: string; cases: CaseBranch[]; default?: string })
   | (BaseState & { kind: 'parallel'; branches: string[]; join: string })
-  | (BaseState & { kind: 'wait'; until?: string; delayMs?: number; next?: string })
+  | (BaseState & {
+      kind: 'wait';
+      name?: string;
+      until?: string;
+      delayMs?: number;
+      attachedTo?: string;
+      interrupting?: boolean;
+      next?: string;
+    })
   | (BaseState & { kind: 'stop'; reason?: string });
 
 export type Retry = { max: number; backoffMs?: number; jitter?: boolean };

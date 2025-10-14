@@ -43,8 +43,10 @@ export function computeClarifications(
     parsed = tryParseInlineSimpleScript(story.trim());
   }
 
-  // Use precomputed insights if available, otherwise derive them
-  const insights = precomputedInsights ?? deriveInsights(story, parsed);
+  const derivedInsights = deriveInsights(story, parsed);
+  const insights = precomputedInsights
+    ? mergeInsights(precomputedInsights, derivedInsights)
+    : derivedInsights;
   const { confidence, warnings } = evaluateConfidenceAndWarnings(insights);
 
   const prompts = buildClarificationPrompts({
@@ -197,6 +199,72 @@ function deriveInsights(story: string, parsed?: SimpleScript): NarrativeInsights
       }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   };
+}
+
+function mergeInsights(primary: NarrativeInsights, supplemental: NarrativeInsights): NarrativeInsights {
+  const actors = new Set<string>();
+  for (const actor of primary.actors ?? []) {
+    if (actor.trim()) actors.add(actor.toLowerCase());
+  }
+  for (const actor of supplemental.actors ?? []) {
+    if (actor.trim()) actors.add(actor.toLowerCase());
+  }
+
+  const intents = new Set<string>();
+  for (const intent of primary.intents ?? []) {
+    if (intent.trim()) intents.add(intent);
+  }
+  for (const intent of supplemental.intents ?? []) {
+    if (intent.trim()) intents.add(intent);
+  }
+
+  const variables = new Map<string, NarrativeVariableAccumulator>();
+
+  const ingestVariables = (source: NarrativeInsights) => {
+    for (const variable of source.variables ?? []) {
+      const key = variable.name.trim().toLowerCase();
+      if (!key) continue;
+      let entry = variables.get(key);
+      if (!entry) {
+        entry = {
+          name: key,
+          description: variable.description,
+          origins: new Set(variable.origins ?? []),
+        } satisfies NarrativeVariableAccumulator;
+        variables.set(key, entry);
+        continue;
+      }
+
+      if (variable.description) {
+        const existingLength = entry.description?.length ?? Number.POSITIVE_INFINITY;
+        if (!entry.description || variable.description.length < existingLength) {
+          entry.description = variable.description;
+        }
+      }
+
+      for (const origin of variable.origins ?? []) {
+        entry.origins.add(origin);
+      }
+    }
+  };
+
+  ingestVariables(primary);
+  ingestVariables(supplemental);
+
+  const materializedVariables = Array.from(variables.values()).map(variable => ({
+    name: variable.name,
+    description: variable.description,
+    origins: Array.from(variable.origins).sort(),
+  }));
+
+  return {
+    actors: Array.from(actors)
+      .map(actor => actor.trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b)),
+    intents: Array.from(intents).sort((a, b) => a.localeCompare(b)),
+    variables: materializedVariables.sort((a, b) => a.name.localeCompare(b.name)),
+  } satisfies NarrativeInsights;
 }
 
 type VariableAccumulator = {

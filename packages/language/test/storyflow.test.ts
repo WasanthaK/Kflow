@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { storyToSimple } from '../src/storyflow/compile';
+import { storyToSimple, storyToIr } from '../src/storyflow/compile';
 
 describe('storyToSimple', () => {
   it('converts plain text to SimpleScript JSON string', () => {
@@ -45,5 +45,35 @@ Stop`;
     const messageTask = parsed.steps.find((step: any) => step.messageTask);
   expect(messageTask?.messageTask.messageType).toBe('email');
   expect(messageTask?.messageTask.description).toBe('email to {customer}: "Approved"');
+  });
+});
+
+describe('storyToIr', () => {
+  it('creates wait states for timed pauses', () => {
+    const story = `Flow: Timed Pause
+Wait 10 minutes for stabilization
+Stop`;
+
+    const ir = storyToIr(story);
+    const waitState = ir.states.find(state => state.kind === 'wait');
+
+    expect(waitState).toBeDefined();
+    expect(waitState?.delayMs).toBe(10 * 60 * 1000);
+    expect(waitState?.name).toBe('10 minutes for stabilization');
+    expect(waitState?.until).toBe('stabilization');
+  });
+
+  it('creates wait states for open-ended waits', () => {
+    const story = `Flow: Event Pause
+Wait for shipping confirmation
+Stop`;
+
+    const ir = storyToIr(story);
+    const waitState = ir.states.find(state => state.kind === 'wait');
+
+    expect(waitState).toBeDefined();
+    expect(waitState?.delayMs).toBeUndefined();
+    expect(waitState?.until).toBe('shipping confirmation');
+    expect(waitState?.name).toBe('Wait for shipping confirmation');
   });
 });

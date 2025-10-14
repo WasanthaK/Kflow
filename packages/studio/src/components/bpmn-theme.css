@@ -1,0 +1,69 @@
+.bpmn-canvas .djs-container {
+  background: radial-gradient(circle at top, rgba(14, 165, 233, 0.05), transparent 60%),
+    linear-gradient(135deg, rgba(14, 165, 233, 0.05) 0%, rgba(244, 114, 182, 0.05) 100%);
+}
+
+.bpmn-canvas .djs-element.djs-shape .djs-outline {
+  stroke-width: 2px;
+  stroke-opacity: 0.85;
+}
+
+.bpmn-canvas .djs-element.djs-shape .djs-visual text {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  font-size: 12px;
+  fill: #1e293b;
+}
+
+.bpmn-canvas .djs-palette {
+  background: rgba(15, 23, 42, 0.8);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.25);
+  color: #f8fafc;
+  padding: 8px 6px;
+}
+
+.bpmn-canvas .djs-palette .entry {
+  border-radius: 8px;
+  margin: 4px 2px;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  color: #e2e8f0;
+}
+
+.bpmn-canvas .djs-palette .entry:hover {
+  background: rgba(148, 163, 184, 0.35);
+  transform: translateY(-1px);
+}
+
+.bpmn-canvas .djs-palette .entry:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.8);
+  outline-offset: 2px;
+}
+
+.bpmn-canvas .djs-palette .entry svg,
+.bpmn-canvas .djs-palette .entry .icon,
+.bpmn-canvas .djs-palette .entry .djs-icon {
+  fill: #e2e8f0;
+  stroke: #e2e8f0;
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.45));
+}
+
+.bpmn-canvas .djs-palette .entry.separator {
+  margin: 8px 0;
+  height: 1px;
+  background: rgba(148, 163, 184, 0.4);
+  pointer-events: none;
+}
+
+.bpmn-canvas .djs-connection .djs-visual path {
+  stroke-width: 2.5px;
+  stroke-linecap: round;
+}
+
+.bpmn-canvas .djs-connection:hover .djs-outline {
+  stroke: rgba(14, 165, 233, 0.65);
+}
+
+.bpmn-canvas .djs-highlights .djs-outline {
+  stroke: rgba(14, 165, 233, 0.65) !important;
+  stroke-width: 4px !important;
+}
