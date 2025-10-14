@@ -8,12 +8,18 @@ import {
 } from './clarifications';
 import { exampleFiles, loadExample } from './examples';
 import { normalizeStoryAsset, type KStory, type NormalizeOptions } from './kstory';
-import { WorkflowGraph } from '../components/WorkflowGraph';
+import { ensureKflowStoryWithAI } from './baConversion';
+import { BpmnDiagram } from '../components/BpmnDiagram';
 import { storySamples, DEFAULT_SAMPLE_ID, getSampleById } from './samples';
 import type { NarrativeInsights, NarrativeVariableOrigin } from '../../../language/src/storyflow/narrative.js';
 import SyntaxHighlightedEditor from '../components/SyntaxHighlightedEditor';
+import type { IR } from '../../../language/src/ir/types.js';
+import { storyToIr, storyToSimple } from '../../../language/src/storyflow/compile.js';
+import { irToBpmnXml } from '../../../language/src/compile/bpmn.js';
+import { validateBpmnXml } from './bpmnValidation';
 
 const CUSTOM_SAMPLE_ID = 'custom';
+const FLOW_HEADER_REGEX = /^\s*flow\s*:/i;
 const DEFAULT_STORY = getSampleById(DEFAULT_SAMPLE_ID)?.content ?? `Flow: Advanced Order Processing System
 
 Ask customer for {order_details} and {payment_method}
@@ -43,27 +49,98 @@ Otherwise
   Ask warehouse team to resolve shipping issue
   Stop`;
 
-function safeCompileStoryToSimple(story: string): KStory['simpleScript'] {
-  try {
-    const result = storyToSimple(story);
-    if (typeof result === 'string' && result.trim()) {
-      return JSON.parse(result) as KStory['simpleScript'];
-    }
-  } catch (error) {
-    console.warn('Failed to compile story to SimpleScript', error);
+type StoryArtifacts = {
+  simpleScript: KStory['simpleScript'];
+  simpleScriptText: string;
+  ir: IR | null;
+  irJson: string;
+  bpmnXml: string;
+  errors: string[];
+};
+
+function compileStoryArtifacts(story: string): StoryArtifacts {
+  const trimmed = story.trim();
+  if (!trimmed) {
+    return {
+      simpleScript: null,
+      simpleScriptText: '',
+      ir: null,
+      irJson: '',
+      bpmnXml: '',
+      errors: [],
+    };
   }
-  return null;
+
+  const errors: string[] = [];
+
+  let simpleScript: KStory['simpleScript'] = null;
+  let simpleScriptText = '';
+  try {
+    const simpleResult = storyToSimple(trimmed);
+    if (typeof simpleResult === 'string') {
+      try {
+        const parsed = JSON.parse(simpleResult) as KStory['simpleScript'];
+        simpleScript = parsed;
+        simpleScriptText = JSON.stringify(parsed, null, 2);
+      } catch (parseError) {
+        console.warn('Failed to parse SimpleScript JSON output', parseError);
+        errors.push(`SimpleScript parsing failed: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        simpleScriptText = simpleResult;
+      }
+    }
+  } catch (simpleError) {
+    console.warn('Failed to compile story to SimpleScript', simpleError);
+    errors.push(`SimpleScript conversion failed: ${simpleError instanceof Error ? simpleError.message : String(simpleError)}`);
+  }
+
+  let ir: IR | null = null;
+  let irJson = '';
+  try {
+    ir = storyToIr(trimmed);
+    irJson = JSON.stringify(ir, null, 2);
+  } catch (irError) {
+    console.warn('Failed to compile story to IR', irError);
+    errors.push(`IR conversion failed: ${irError instanceof Error ? irError.message : String(irError)}`);
+  }
+
+  let bpmnXml = '';
+  if (ir) {
+    try {
+      bpmnXml = irToBpmnXml(ir);
+    } catch (bpmnError) {
+      console.warn('Failed to convert IR to BPMN XML', bpmnError);
+      errors.push(`BPMN conversion failed: ${bpmnError instanceof Error ? bpmnError.message : String(bpmnError)}`);
+      bpmnXml = '';
+    }
+  }
+
+  return {
+    simpleScript,
+    simpleScriptText,
+    ir,
+    irJson,
+    bpmnXml,
+    errors,
+  };
 }
 
 const DEFAULT_NORMALIZED_KSTORY = normalizeStoryAsset(DEFAULT_STORY, {
   filename: `${DEFAULT_SAMPLE_ID}.story`,
 });
-const DEFAULT_SIMPLE_OBJECT = DEFAULT_NORMALIZED_KSTORY.simpleScript ?? safeCompileStoryToSimple(DEFAULT_NORMALIZED_KSTORY.story);
+const DEFAULT_ARTIFACTS = compileStoryArtifacts(DEFAULT_NORMALIZED_KSTORY.story);
+if (DEFAULT_ARTIFACTS.errors.length) {
+  console.warn('Issues compiling default story artifacts', DEFAULT_ARTIFACTS.errors);
+}
+const DEFAULT_SIMPLE_OBJECT = DEFAULT_NORMALIZED_KSTORY.simpleScript ?? DEFAULT_ARTIFACTS.simpleScript;
+const DEFAULT_CONVERTED = DEFAULT_SIMPLE_OBJECT
+  ? JSON.stringify(DEFAULT_SIMPLE_OBJECT, null, 2)
+  : DEFAULT_ARTIFACTS.simpleScriptText;
 const DEFAULT_KSTORY: KStory = {
   ...DEFAULT_NORMALIZED_KSTORY,
   simpleScript: DEFAULT_SIMPLE_OBJECT,
+  ir: DEFAULT_ARTIFACTS.ir,
+  bpmnXml: DEFAULT_ARTIFACTS.ir ? DEFAULT_ARTIFACTS.bpmnXml : null,
 };
-const DEFAULT_CONVERTED = DEFAULT_SIMPLE_OBJECT ? JSON.stringify(DEFAULT_SIMPLE_OBJECT, null, 2) : '';
 
 const CLARIFICATION_PALETTE: Record<ClarificationPrompt['severity'], string> = {
   info: '#0ea5e9',
@@ -118,6 +195,14 @@ const EMPTY_CLARIFICATIONS: ClarificationSummary = {
     return CATEGORY_LABELS[category] ?? category;
   }
 
+function slugifyFilename(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+}
+
 
 // Local AI Types and Implementation
 interface AutocompleteSuggestion {
@@ -126,158 +211,9 @@ interface AutocompleteSuggestion {
   confidence: number;
   description?: string;
   category?: string;
-    }
+}
 // AI Autocomplete Integration
 let autocompleteEngine: any = null;
-
-// Enhanced StoryFlow Compiler (local implementation)
-function storyToSimple(story: string): string {
-  const lines = story.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const title = lines.find(l => l.toLowerCase().startsWith('flow:'))?.replace(/^[^:]+:/, '').trim() || 'Untitled';
-  
-  // Enhanced variable extraction
-  const vars: Record<string, string> = {};
-  
-  // 1. Extract template variables {variable}
-  const templateVars = story.match(/{([^}]+)}/g) || [];
-  const uniqueTemplateVars = [...new Set(templateVars.map(v => v.slice(1, -1)))];
-  uniqueTemplateVars.forEach(varName => {
-    vars[varName] = `input variable (${varName})`;
-  });
-  
-  // 2. Extract condition variables from If statements
-  const conditions = story.match(/If\s+([^\n]+)/gi) || [];
-  conditions.forEach(condition => {
-    const conditionText = condition.replace(/^If\s+/i, '').trim();
-    if (conditionText.match(/approved|accepted|confirmed/i)) {
-      vars['approved'] = 'boolean state from approval decision';
-    }
-    if (conditionText.match(/rejected|denied|declined/i)) {
-      vars['rejected'] = 'boolean state from rejection decision';  
-    }
-    if (conditionText.match(/available|exists|found/i)) {
-      vars['available'] = 'boolean state for availability check';
-    }
-  });
-  
-  // 3. Extract actors
-  const actors = story.match(/\b(manager|employee|user|customer|admin|supervisor|owner|agent|lead|team|staff)\b/gi) || [];
-  const uniqueActors = [...new Set(actors.map(a => a.toLowerCase()))];
-  uniqueActors.forEach(actor => {
-    if (!vars[actor] && !uniqueTemplateVars.includes(actor)) {
-      vars[actor] = `workflow actor`;
-    }
-  });
-
-  // Convert lines to enhanced steps with BPMN compliance
-  const steps = lines
-    .filter(l => !/^flow:|^trigger:/i.test(l))
-    .map(l => {
-      // Handle control flow structures
-      if (/^if\s+/i.test(l)) {
-        return { if: l.replace(/^if\s+/i, '').trim() };
-      }
-      if (/^otherwise/i.test(l)) {
-        return { otherwise: true };
-      }
-      
-      // Enhanced task type detection
-      if (/^ask /i.test(l)) {
-        return {
-          userTask: {
-            description: l.slice(4).trim(),
-            assignee: extractAssignee(l),
-            type: 'human_input'
-          }
-        };
-      }
-      
-      // Script tasks (calculations/transformations)
-      if (/^do:\s*(calculate|compute|transform|parse|analyze|format|sum|average|total|count)/i.test(l)) {
-        const description = l.replace(/^do:?\s*/i,'');
-        return { 
-          scriptTask: {
-            description: description,
-            type: 'computation',
-            subtype: getScriptTaskSubtype(description),
-            executable: isExecutableScript(description)
-          }
-        };
-      }
-      
-      // Service tasks (system operations)
-      if (/^do:\s*(create|update|delete|insert|process|execute|call|run)/i.test(l)) {
-        return { 
-          serviceTask: {
-            description: l.replace(/^do:?\s*/i,''),
-            type: 'system_operation'
-          }
-        };
-      }
-      
-      // Manual tasks
-      if (/^do:\s*(review|approve|check|verify|inspect|examine)/i.test(l)) {
-        return { 
-          manualTask: {
-            description: l.replace(/^do:?\s*/i,''),
-            type: 'human_work'
-          }
-        };
-      }
-      
-      // Business rule tasks
-      if (/^do:\s*(evaluate|determine|decide|classify|assess)/i.test(l)) {
-        return { 
-          businessRuleTask: {
-            description: l.replace(/^do:?\s*/i,''),
-            type: 'rule_evaluation'
-          }
-        };
-      }
-      
-      // Generic do task
-      if (/^do:/i.test(l) || /^do /i.test(l)) return { do: l.replace(/^do:?\s*/i,'') };
-      
-      // Message tasks
-      if (/^send /i.test(l)) {
-        return {
-          messageTask: {
-            description: l.slice(5).trim(),
-            type: 'send',
-            messageType: l.includes('email') ? 'email' : 'message'
-          }
-        };
-      }
-      
-      // Wait tasks
-      if (/^wait /i.test(l)) {
-        return { waitTask: { description: l.slice(5).trim(), type: 'timer' } };
-      }
-      
-      if (/^stop/i.test(l)) return { endEvent: { type: 'terminate' } };
-      
-      return { remember: { note: l } };
-    });
-
-  // Helper functions
-  function extractAssignee(line: string): string | undefined {
-    const match = line.match(/ask\s+([^{\s]+)/i);
-    return match ? match[1] : undefined;
-  }
-  
-  function getScriptTaskSubtype(description: string): string {
-    if (/calculate|compute|sum|average|total/i.test(description)) return 'financial_calculation';
-    if (/transform|convert|format|parse/i.test(description)) return 'data_transformation';
-    if (/analyze|count|aggregate/i.test(description)) return 'statistical_analysis';
-    return 'general_computation';
-  }
-
-  function isExecutableScript(description: string): boolean {
-    return /=|formula|function|algorithm|\+|\-|\*|\//.test(description);
-  }
-
-  return JSON.stringify({ flow: title, vars, steps }, null, 2);
-}
 
 // Simple AI Autocomplete Class
 class SimpleAutocomplete {
@@ -403,23 +339,193 @@ export function App() {
   const [graphFullscreen, setGraphFullscreen] = useState(false);
   const [showClarifications, setShowClarifications] = useState(true);
   const [clarifications, setClarifications] = useState<ClarificationSummary>(EMPTY_CLARIFICATIONS);
+  const [lastConversionMeta, setLastConversionMeta] = useState<{ aiUsed: boolean; modified: boolean; aiError?: string } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const copyFeedbackTimeout = useRef<number | null>(null);
 
   const activeSample = selectedSampleId === CUSTOM_SAMPLE_ID ? undefined : getSampleById(selectedSampleId);
+  const irJson = useMemo(() => kstory.ir ? JSON.stringify(kstory.ir, null, 2) : '', [kstory.ir]);
+  const bpmnXml = useMemo(() => kstory.bpmnXml ?? '', [kstory.bpmnXml]);
+  const defaultBpmnFilename = useMemo(() => {
+    const metadataSourceCandidate = kstory.metadata?.['sourceFilename'];
+    const metadataSource = typeof metadataSourceCandidate === 'string' ? metadataSourceCandidate : undefined;
+    const candidate = kstory.sourceFilename ?? metadataSource ?? 'kflow-workflow';
+    const base = candidate.replace(/\.[^.]+$/, '');
+    const slug = slugifyFilename(base);
+    return `${slug || 'kflow-workflow'}.bpmn`;
+  }, [kstory.sourceFilename, kstory.metadata?.sourceFilename]);
 
-  const applyNormalizedKStory = useCallback((rawContent: string, options: NormalizeOptions = {}) => {
-    const normalized = normalizeStoryAsset(rawContent, options);
-    const resolvedSimpleScript = (normalized.simpleScript ?? safeCompileStoryToSimple(normalized.story)) as KStory['simpleScript'];
+  useEffect(() => () => {
+    if (copyFeedbackTimeout.current !== null) {
+      window.clearTimeout(copyFeedbackTimeout.current);
+    }
+  }, []);
+
+  const handleCopyToClipboard = useCallback(async (value: string, label: string) => {
+    if (!value?.trim()) {
+      setCopyFeedback(`No ${label.toLowerCase()} available to copy.`);
+      if (copyFeedbackTimeout.current !== null) {
+        window.clearTimeout(copyFeedbackTimeout.current);
+      }
+      copyFeedbackTimeout.current = window.setTimeout(() => setCopyFeedback(null), 2000);
+      return;
+    }
+
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      setCopyFeedback('Clipboard access is unavailable in this browser.');
+      if (copyFeedbackTimeout.current !== null) {
+        window.clearTimeout(copyFeedbackTimeout.current);
+      }
+      copyFeedbackTimeout.current = window.setTimeout(() => setCopyFeedback(null), 3000);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyFeedback(`${label} copied to clipboard.`);
+    } catch (clipboardError) {
+      console.warn(`Failed to copy ${label}`, clipboardError);
+      setCopyFeedback(`Failed to copy ${label.toLowerCase()}.`);
+    }
+
+    if (copyFeedbackTimeout.current !== null) {
+      window.clearTimeout(copyFeedbackTimeout.current);
+    }
+    copyFeedbackTimeout.current = window.setTimeout(() => setCopyFeedback(null), 2000);
+  }, []);
+
+  const handleDownloadBpmn = useCallback(() => {
+    if (!bpmnXml?.trim() || typeof window === 'undefined') {
+      setCopyFeedback('No BPMN XML available to download.');
+      if (copyFeedbackTimeout.current !== null) {
+        window.clearTimeout(copyFeedbackTimeout.current);
+      }
+      copyFeedbackTimeout.current = window.setTimeout(() => setCopyFeedback(null), 2000);
+      return;
+    }
+
+    try {
+      const blob = new Blob([bpmnXml], { type: 'application/xml' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = defaultBpmnFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+      setCopyFeedback(`Downloading ${defaultBpmnFilename}…`);
+    } catch (downloadError) {
+      console.warn('Failed to download BPMN XML', downloadError);
+      setCopyFeedback('Failed to trigger BPMN download.');
+    }
+
+    if (copyFeedbackTimeout.current !== null) {
+      window.clearTimeout(copyFeedbackTimeout.current);
+    }
+    copyFeedbackTimeout.current = window.setTimeout(() => setCopyFeedback(null), 2000);
+  }, [bpmnXml, defaultBpmnFilename]);
+
+  const aiTranslator = useCallback(async (brief: string) => {
+    const storedKey = typeof localStorage !== 'undefined' ? localStorage.getItem('openai-api-key') : '';
+    const effectiveKey = apiKey.trim() || storedKey || '';
+    if (!effectiveKey) {
+      throw new Error('Missing OpenAI API key');
+    }
+
+    const client = createOpenAIClient(effectiveKey);
+    const blocks = await convertBriefsToKstory([brief], client);
+    if (!blocks.length) {
+      throw new Error('No KStory output returned by the model.');
+    }
+
+    const [firstBlock] = blocks;
+    const match = firstBlock.match(/```kflow\s*([\s\S]*?)```/i);
+    const extracted = (match ? match[1] : firstBlock)
+      .replace(/^```kflow/i, '')
+      .replace(/```$/i, '')
+      .trim();
+
+    if (!extracted) {
+      throw new Error('Model response did not contain KStory content.');
+    }
+
+    return extracted;
+  }, [apiKey]);
+
+  const applyNormalizedKStory = useCallback(async (
+    rawContent: string,
+    options: NormalizeOptions = {},
+    runtime: { preferAI?: boolean } = {}
+  ) => {
+    const baseContent = rawContent ?? '';
+    const intendsAi = runtime.preferAI !== false;
+    const shouldTryAI = intendsAi && !FLOW_HEADER_REGEX.test(baseContent.trim());
+    let aiError: string | null = null;
+
+    const ensureResult = await ensureKflowStoryWithAI(
+      baseContent,
+      shouldTryAI ? aiTranslator : undefined,
+      shouldTryAI
+        ? (error: unknown) => {
+            aiError = error instanceof Error ? error.message : String(error);
+          }
+        : undefined
+    );
+
+    const normalized = normalizeStoryAsset(ensureResult.story, options);
+    const artifacts = compileStoryArtifacts(normalized.story);
+    const resolvedSimpleScript = (normalized.simpleScript ?? artifacts.simpleScript) as KStory['simpleScript'];
+    const resolvedConverted = resolvedSimpleScript
+      ? JSON.stringify(resolvedSimpleScript, null, 2)
+      : artifacts.simpleScriptText;
+    const resolvedIr = artifacts.ir;
+
+    let validatedBpmnXml = artifacts.bpmnXml;
+    const validationMessages: string[] = [];
+
+    if (validatedBpmnXml) {
+      const validation = await validateBpmnXml(validatedBpmnXml);
+      if (validation.errors.length) {
+        validationMessages.push(...validation.errors);
+        validatedBpmnXml = '';
+      }
+      if (validation.warnings.length) {
+        validationMessages.push(...validation.warnings);
+      }
+    }
 
     setKStory({
       ...normalized,
       simpleScript: resolvedSimpleScript,
+      ir: resolvedIr,
+      bpmnXml: resolvedIr && validatedBpmnXml?.trim() ? validatedBpmnXml : null,
     });
     setStory(normalized.story);
-    setConverted(resolvedSimpleScript ? JSON.stringify(resolvedSimpleScript, null, 2) : '');
+    setConverted(resolvedConverted);
+
+    const combinedErrors = [
+      ...(aiError ? [`AI translation failed: ${aiError}. Falling back to heuristic conversion.`] : []),
+      ...artifacts.errors,
+      ...validationMessages,
+    ].filter(Boolean);
+
+    if (combinedErrors.length) {
+      setError(combinedErrors.join('\n'));
+    } else {
+      setError('');
+    }
     setClarifications(EMPTY_CLARIFICATIONS);
-  }, [setClarifications]);
+    setLastConversionMeta({
+      aiUsed: ensureResult.aiUsed,
+      modified: ensureResult.modified,
+      aiError: aiError ?? undefined,
+    });
+
+    return { aiUsed: ensureResult.aiUsed, artifacts };
+  }, [aiTranslator, setClarifications, setError, setLastConversionMeta]);
 
   const applyStoryText = useCallback((nextStory: string) => {
     setStory(nextStory);
@@ -429,44 +535,50 @@ export function App() {
     }));
   }, []);
 
+  const deriveActiveFilename = useCallback((): string | undefined => {
+    if (uploadedFilename) {
+      return uploadedFilename;
+    }
+    if (selectedSampleId && selectedSampleId !== CUSTOM_SAMPLE_ID) {
+      return `${selectedSampleId}.story`;
+    }
+    return undefined;
+  }, [selectedSampleId, uploadedFilename]);
+
   const handleConvert = useCallback(async () => {
     const trimmed = story.trim();
     if (!trimmed) {
-      setError('Please enter a story first');
       setConverted('');
       setKStory(prev => ({
         ...prev,
         story: '',
         simpleScript: null,
+        ir: null,
+        bpmnXml: null,
       }));
+      setError('');
+      setLastConversionMeta(null);
       return;
     }
 
     setIsConverting(true);
-    setError('');
-
     try {
-      const result = storyToSimple(story);
-      setConverted(result);
-
-  const parsed = JSON.parse(result) as KStory['simpleScript'];
-      setKStory(prev => ({
-        ...prev,
-        story,
-        simpleScript: parsed,
-      }));
-    } catch (err) {
-      setError(`Conversion failed: ${err instanceof Error ? err.message : String(err)}`);
+      await applyNormalizedKStory(trimmed, { filename: deriveActiveFilename() }, { preferAI: true });
+    } catch (unexpectedError) {
+      setError(`Unexpected conversion error: ${unexpectedError instanceof Error ? unexpectedError.message : String(unexpectedError)}`);
       setConverted('');
       setKStory(prev => ({
         ...prev,
         story,
         simpleScript: null,
+        ir: null,
+        bpmnXml: null,
       }));
+      setLastConversionMeta(null);
     } finally {
       setIsConverting(false);
     }
-  }, [story]);
+  }, [story, applyNormalizedKStory, deriveActiveFilename, setError]);
 
   // Auto-convert when story changes
   useEffect(() => {
@@ -476,8 +588,11 @@ export function App() {
         ...prev,
         story: '',
         simpleScript: null,
+        ir: null,
+        bpmnXml: null,
       }));
       setError('');
+      setLastConversionMeta(null);
       return;
     }
 
@@ -546,6 +661,40 @@ export function App() {
       variableOverflow: Math.max(0, variableNames.length - 6),
     };
   }, [clarifications.insights.actors, clarifications.insights.variables]);
+
+  const conversionStatusBadge = useMemo(() => {
+    if (!lastConversionMeta) {
+      return null;
+    }
+    const { aiUsed, aiError, modified } = lastConversionMeta;
+    let label = 'AI translation';
+    let background = '#dcfce7';
+    let border = '#86efac';
+    let color = '#166534';
+
+    if (!aiUsed) {
+      if (!modified) {
+        label = 'Already formatted';
+        background = '#e2e8f0';
+        border = '#cbd5e1';
+        color = '#1f2937';
+      } else {
+        label = 'Fallback (heuristic)';
+        background = '#fef3c7';
+        border = '#fde68a';
+        color = '#92400e';
+      }
+    }
+
+    const detail = !aiUsed && aiError ? ` · ${aiError}` : '';
+
+    return {
+      label: `${label}${detail}`,
+      background,
+      border,
+      color,
+    };
+  }, [lastConversionMeta]);
 
   const confidenceValue = clarifications.confidence ?? null;
   const confidencePercentage = confidenceValue !== null ? Math.round(confidenceValue * 100) : null;
@@ -653,7 +802,7 @@ export function App() {
 
     const sample = getSampleById(nextId);
     if (sample) {
-      applyNormalizedKStory(sample.content, { filename: `${sample.id}.story` });
+      void applyNormalizedKStory(sample.content, { filename: `${sample.id}.story` });
       setError('');
     }
   }, [applyNormalizedKStory, setError]);
@@ -677,7 +826,7 @@ export function App() {
     const reader = new FileReader();
     reader.onload = () => {
       const text = typeof reader.result === 'string' ? reader.result : '';
-      applyNormalizedKStory(text, { filename: file.name });
+      void applyNormalizedKStory(text, { filename: file.name });
       setSelectedSampleId(CUSTOM_SAMPLE_ID);
       setUploadedFilename(file.name);
       setError('');
@@ -693,8 +842,8 @@ export function App() {
     if (!file) return;
     setIsLoadingExample(true);
     try {
-      const text = await loadExample(file);
-      applyNormalizedKStory(text, { filename: file });
+    const text = await loadExample(file);
+    await applyNormalizedKStory(text, { filename: file });
       setSelectedSampleId(CUSTOM_SAMPLE_ID);
       setUploadedFilename(file);
       setShowSuggestions(false);
@@ -725,24 +874,8 @@ export function App() {
     setIsAiConverting(true);
     setError('');
     try {
-      const client = createOpenAIClient(effectiveKey);
-      const blocks = await convertBriefsToKstory([brief], client);
-      if (!blocks.length) {
-        throw new Error('No KStory output returned by the model.');
-      }
-
-      const [firstBlock] = blocks;
-      const match = firstBlock.match(/```kflow\s*([\s\S]*?)```/i);
-      const extracted = (match ? match[1] : firstBlock)
-        .replace(/^```kflow/i, '')
-        .replace(/```$/i, '')
-        .trim();
-
-      if (!extracted) {
-        throw new Error('Model response did not contain KStory content.');
-      }
-
-      applyNormalizedKStory(extracted, { filename: 'ai-converted.story' });
+      const extracted = await aiTranslator(brief);
+      await applyNormalizedKStory(extracted, { filename: 'ai-converted.story' });
       setSelectedSampleId(CUSTOM_SAMPLE_ID);
       setUploadedFilename(null);
     } catch (err) {
@@ -751,7 +884,7 @@ export function App() {
     } finally {
       setIsAiConverting(false);
     }
-  }, [story, apiKey, applyNormalizedKStory, setSelectedSampleId, setUploadedFilename, setShowAiSetup, setError]);
+  }, [story, apiKey, aiTranslator, applyNormalizedKStory, setSelectedSampleId, setUploadedFilename, setShowAiSetup, setError]);
 
   // AI Autocomplete Functions
   const handleTextareaKeyDown = useCallback(async (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -960,6 +1093,23 @@ export function App() {
                 {showClarifications ? 'Clarifications ON' : 'Clarifications OFF'}
               </button>
               {showGraph && <button onClick={()=>setGraphFullscreen(true)} style={{padding:'4px 8px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>Fullscreen</button>}
+              {conversionStatusBadge && (
+                <span
+                  style={{
+                    alignSelf:'center',
+                    padding:'2px 10px',
+                    borderRadius:999,
+                    fontSize:11,
+                    fontWeight:600,
+                    background:conversionStatusBadge.background,
+                    border:`1px solid ${conversionStatusBadge.border}`,
+                    color:conversionStatusBadge.color,
+                    whiteSpace:'nowrap'
+                  }}
+                >
+                  {conversionStatusBadge.label}
+                </span>
+              )}
             </div>
           </div>
           {activeSample && (
@@ -998,8 +1148,103 @@ export function App() {
             )}
           </div>
           {error && <div style={{color:'#dc2626',background:'#fef2f2',border:'1px solid #fecaca',margin:12,padding:8,borderRadius:4,fontSize:12}}>Error: {error}</div>}
-          {converted && assistVisible && (
-            <pre style={{margin:12,background:'#f8fafc',border:'1px solid #e2e8f0',padding:12,borderRadius:6,fontSize:12,maxHeight:200,overflow:'auto'}}>{converted}</pre>
+          {assistVisible && (
+            <div
+              style={{
+                margin:'12px',
+                padding:'16px',
+                border:'1px solid #cbd5f5',
+                borderRadius:12,
+                background:'#eef2ff',
+                display:'flex',
+                flexDirection:'column',
+                gap:14
+              }}
+            >
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div style={{display:'flex',flexDirection:'column'}}>
+                  <span style={{fontSize:12,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:'#3730a3'}}>Compiler Artifacts</span>
+                  <span style={{fontSize:12,color:'#4338ca'}}>SimpleScript · IR · BPMN XML</span>
+                </div>
+                {copyFeedback && (
+                  <div
+                    style={{
+                      padding:'6px 10px',
+                      borderRadius:999,
+                      background:'#1d4ed822',
+                      color:'#1d4ed8',
+                      fontSize:11,
+                      fontWeight:600,
+                      border:'1px solid rgba(29, 78, 216, 0.25)'}}
+                  >
+                    {copyFeedback}
+                  </div>
+                )}
+              </div>
+
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                <div style={{border:'1px solid #e0e7ff',borderRadius:10,background:'#f8fafc'}}>
+                  <div style={{padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid #e0e7ff'}}>
+                    <strong style={{fontSize:12,color:'#1f2937'}}>SimpleScript JSON</strong>
+                    <div style={{display:'flex',gap:6}}>
+                      <button
+                        onClick={() => handleCopyToClipboard(converted, 'SimpleScript JSON')}
+                        style={{padding:'4px 8px',fontSize:11,background:'#2563eb',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                  {converted?.trim() ? (
+                    <pre style={{margin:0,padding:12,fontSize:12,lineHeight:1.45,background:'#f8fafc',maxHeight:220,overflow:'auto',color:'#1f2937'}}>{converted}</pre>
+                  ) : (
+                    <div style={{padding:12,fontSize:12,color:'#6b7280'}}>No SimpleScript JSON available yet.</div>
+                  )}
+                </div>
+
+                <div style={{border:'1px solid #e0e7ff',borderRadius:10,background:'#f8fafc'}}>
+                  <div style={{padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid #e0e7ff'}}>
+                    <strong style={{fontSize:12,color:'#1f2937'}}>IR (Intermediate Representation)</strong>
+                    <button
+                      onClick={() => handleCopyToClipboard(irJson, 'IR JSON')}
+                      style={{padding:'4px 8px',fontSize:11,background:'#2563eb',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  {irJson ? (
+                    <pre style={{margin:0,padding:12,fontSize:12,lineHeight:1.45,background:'#f8fafc',maxHeight:220,overflow:'auto',color:'#1f2937'}}>{irJson}</pre>
+                  ) : (
+                    <div style={{padding:12,fontSize:12,color:'#6b7280'}}>IR is not available for this story yet.</div>
+                  )}
+                </div>
+
+                <div style={{border:'1px solid #e0e7ff',borderRadius:10,background:'#f8fafc'}}>
+                  <div style={{padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid #e0e7ff'}}>
+                    <strong style={{fontSize:12,color:'#1f2937'}}>BPMN XML</strong>
+                    <div style={{display:'flex',gap:6}}>
+                      <button
+                        onClick={() => handleCopyToClipboard(bpmnXml, 'BPMN XML')}
+                        style={{padding:'4px 8px',fontSize:11,background:'#2563eb',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}
+                      >
+                        Copy
+                      </button>
+                      <button
+                        onClick={handleDownloadBpmn}
+                        style={{padding:'4px 8px',fontSize:11,background:'#059669',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}
+                      >
+                        Download
+                      </button>
+                    </div>
+                  </div>
+                  {bpmnXml ? (
+                    <pre style={{margin:0,padding:12,fontSize:12,lineHeight:1.45,background:'#f8fafc',maxHeight:220,overflow:'auto',color:'#1f2937'}}>{bpmnXml}</pre>
+                  ) : (
+                    <div style={{padding:12,fontSize:12,color:'#6b7280'}}>BPMN XML will appear after a successful conversion.</div>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
           {showClarifications && (
             <div
@@ -1156,9 +1401,8 @@ export function App() {
                 </div>
               </div>
               <div style={{flex:1,minHeight:0}}>
-                <WorkflowGraph 
-                  key={`${kstory.sourceFilename}-${JSON.stringify(kstory.simpleScript)?.substring(0, 100)}`}
-                  workflowData={kstory.simpleScript ?? null} 
+                <BpmnDiagram 
+                  xml={kstory.bpmnXml ?? undefined}
                 />
               </div>
             </div>
@@ -1173,9 +1417,8 @@ export function App() {
             <button onClick={()=>setGraphFullscreen(false)} style={{padding:'4px 10px',background:'#dc2626',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>Close</button>
           </div>
           <div style={{flex:1}}>
-            <WorkflowGraph 
-              key={`fullscreen-${kstory.sourceFilename}-${JSON.stringify(kstory.simpleScript)?.substring(0, 100)}`}
-              workflowData={kstory.simpleScript ?? null} 
+            <BpmnDiagram 
+              xml={kstory.bpmnXml ?? undefined}
             />
           </div>
         </div>

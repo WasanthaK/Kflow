@@ -1,4 +1,5 @@
 import { parse as parseYaml } from 'yaml';
+import type { IR } from '../../../language/src/ir/types.js';
 import { extractStoryInsights, type StoryInsights } from './storyInsights';
 
 export type SimpleScript = Record<string, unknown>;
@@ -17,6 +18,8 @@ export interface KStory {
   sourceFilename?: string;
   story: string;
   simpleScript: SimpleScript | null;
+  ir?: IR | null;
+  bpmnXml?: string | null;
   metadata?: KStoryMetadata;
 }
 
@@ -36,6 +39,8 @@ export function normalizeStoryAsset(input: string, options: NormalizeOptions = {
       sourceFilename: rawFilename,
       story: '',
       simpleScript: null,
+      ir: null,
+      bpmnXml: null,
       metadata: { sourceFormat: 'story', insights: { actors: [], actions: [], resources: [] } },
     };
   }
@@ -74,6 +79,8 @@ export function normalizeStoryAsset(input: string, options: NormalizeOptions = {
           sourceFilename: rawFilename ?? parsed.sourceFilename,
           story,
           simpleScript,
+          ir: null,
+          bpmnXml: null,
           metadata,
         };
       }
@@ -95,6 +102,8 @@ export function normalizeStoryAsset(input: string, options: NormalizeOptions = {
         sourceFilename: rawFilename,
         story,
         simpleScript,
+        ir: null,
+        bpmnXml: null,
         metadata,
       };
     }
@@ -113,6 +122,8 @@ export function normalizeStoryAsset(input: string, options: NormalizeOptions = {
         sourceFilename: rawFilename,
         story,
         simpleScript,
+        ir: null,
+        bpmnXml: null,
         metadata,
       };
     }
@@ -139,6 +150,8 @@ export function normalizeStoryAsset(input: string, options: NormalizeOptions = {
     sourceFilename: rawFilename,
     story,
     simpleScript,
+    ir: null,
+    bpmnXml: null,
     metadata,
   };
 }
@@ -150,6 +163,8 @@ export function serializeKStory(kstory: KStory): string {
     sourceFilename: kstory.sourceFilename,
     story: kstory.story,
     simpleScript: kstory.simpleScript,
+    ir: kstory.ir ?? undefined,
+    bpmnXml: kstory.bpmnXml ?? undefined,
     metadata: kstory.metadata,
   }, null, 2);
 }

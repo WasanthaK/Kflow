@@ -68,8 +68,8 @@ describe('irToBpmnXml', () => {
     expect(xml).toContain('<bpmn:exclusiveGateway id="ExclusiveGateway_decision" default="Flow_');
     expect(xml).not.toContain('bpmn:isDefault');
     expect(xml).toContain('sourceRef="ExclusiveGateway_decision" targetRef="SendTask_sendNotice"');
-    expect(xml).toContain('<bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[{approved}]]></bpmn:conditionExpression>');
-    expect(xml).toContain('<bpmn:sendTask id="SendTask_sendNotice" name="Send via email"');
+  expect(xml).toContain('<bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[${approved}]]></bpmn:conditionExpression>');
+    expect(xml).toContain('<bpmn:sendTask id="SendTask_sendNotice" name="Send via email" messageRef="Message_sendNotice"');
     expect(xml).toContain('<bpmn:documentation>To customer@example.com: Request approved</bpmn:documentation>');
     expect(xml).toContain('<bpmn:intermediateCatchEvent id="IntermediateCatchEvent_waitForSignal" name="Wait PT1M30S"');
   expect(xml).toContain('<bpmn:timerEventDefinition><bpmn:timeDuration>PT1M30S</bpmn:timeDuration></bpmn:timerEventDefinition>');
@@ -79,9 +79,9 @@ describe('irToBpmnXml', () => {
   expect(xml).toContain('sourceRef="ServiceTask_followUpTask" targetRef="ParallelGateway_parallelTasks_Join"');
     expect(xml).toContain('sourceRef="ParallelGateway_parallelTasks_Join" targetRef="EndEvent_wrapUp"');
   expect(xml).toContain('<bpmn:intermediateCatchEvent id="IntermediateCatchEvent_receiveEvent" name="Wait for external_signal"');
-  expect(xml).toContain('<bpmn:messageEventDefinition />');
-    expect(xml).toContain('<bpmn:endEvent id="EndEvent_wrapUp" name="completed"');
-    expect(xml).toContain('<bpmn:terminateEventDefinition />');
+  expect(xml).toContain('<bpmn:messageEventDefinition messageRef="Message_external_signal" />');
+  expect(xml).toContain('<bpmn:endEvent id="EndEvent_wrapUp" name="completed"');
+  expect(xml).toContain('<bpmn:message id="Message_sendNotice" name="Send Notice" />');
     expect(xml).toContain('<bpmn:laneSet id="LaneSet_Demo_Flow"');
     expect(xml).toContain('name="Control Flow"');
     expect(xml).toContain('name="System Automation"');
@@ -90,6 +90,35 @@ describe('irToBpmnXml', () => {
     expect(xml).toContain('<bpmndi:BPMNShape id="Lane_Control_Flow_di"');
     expect(xml).toContain('<bpmndi:BPMNShape id="StartEvent_serviceTask_di"');
     expect(xml).toContain('isExecutable="false"');
+
+    await assertValidBpmn(xml);
+  });
+
+  it('represents wait-until events as message catch events', async () => {
+    const ir: IR = {
+      name: 'Event Wait Flow',
+      start: 'waitForRequest',
+      states: [
+        {
+          id: 'waitForRequest',
+          kind: 'wait',
+          name: 'Wait for order_request',
+          until: 'order_request event',
+          next: 'finish',
+        },
+        {
+          id: 'finish',
+          kind: 'stop',
+          reason: 'done',
+        },
+      ],
+    };
+
+    const xml = irToBpmnXml(ir);
+
+    expect(xml).toContain('<bpmn:intermediateCatchEvent id="IntermediateCatchEvent_waitForRequest"');
+    expect(xml).toContain('<bpmn:messageEventDefinition messageRef="Message_order_request_event" />');
+    expect(xml).not.toContain('<bpmn:timerEventDefinition>');
 
     await assertValidBpmn(xml);
   });
@@ -144,7 +173,7 @@ describe('irToBpmnXml', () => {
 
     expect(xml).toContain('isExecutable="true"');
     expect(xml).toContain('<bpmn:exclusiveGateway id="ExclusiveGateway_decision"');
-    expect(xml).toContain('<![CDATA[{status} === "approved"]]');
+  expect(xml).toContain('<![CDATA[${status == "approved"}]]');
     expect(xml).toContain('default="Flow_');
     expect(xml).toContain('name="Manager"');
     expect(xml).toContain('<bpmn:flowNodeRef>UserTask_collectInput</bpmn:flowNodeRef>');

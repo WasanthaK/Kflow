@@ -1311,9 +1311,17 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
       if (currentBranch === 'if' && gatewayNodeId && yPosition === branchStartY) {
         // Check if gateway is flipped
         const isGatewayFlipped = gatewayFlips.get(gatewayNodeId) || false;
-        
-        // IF branch = YES/TRUE = ALWAYS GREEN (left handle normally, right when flipped)
-        const sourceHandle = isGatewayFlipped ? 'right' : 'left';
+
+        const gatewayNode = nodes.find(n => n.id === gatewayNodeId);
+        const gatewayX = gatewayNode?.position.x ?? nodeX;
+
+        // Determine ideal handle based on branch position vs gateway
+        const preferredHandle = nodeX < gatewayX ? 'left' : 'right';
+        const sourceHandle = isGatewayFlipped
+          ? preferredHandle === 'left'
+            ? 'right'
+            : 'left'
+          : preferredHandle;
         
         edges.push({
           id: `edge-${gatewayNodeId}-${nodeId}`,
@@ -1344,9 +1352,17 @@ export const WorkflowGraph: React.FC<WorkflowGraphProps> = ({ workflowData }) =>
       } else if (currentBranch === 'otherwise' && gatewayNodeId && yPosition === branchStartY) {
         // Check if gateway is flipped
         const isGatewayFlipped = gatewayFlips.get(gatewayNodeId) || false;
-        
-        // OTHERWISE branch = NO/FALSE = ALWAYS RED (right handle normally, left when flipped)
-        const sourceHandle = isGatewayFlipped ? 'left' : 'right';
+
+        const gatewayNode = nodes.find(n => n.id === gatewayNodeId);
+        const gatewayX = gatewayNode?.position.x ?? nodeX;
+
+        // Determine ideal handle based on branch position vs gateway
+        const preferredHandle = nodeX < gatewayX ? 'left' : 'right';
+        const sourceHandle = isGatewayFlipped
+          ? preferredHandle === 'left'
+            ? 'right'
+            : 'left'
+          : preferredHandle;
         
         edges.push({
           id: `edge-${gatewayNodeId}-${nodeId}`,

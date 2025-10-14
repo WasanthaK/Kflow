@@ -94,7 +94,7 @@ Otherwise
 const DEFAULT_OPTIONS: ConvertBriefsOptions = {
   model: 'o4-mini',
   temperature: 0.2,
-  maxOutputTokens: 3200,
+  maxOutputTokens: 6400,
   retries: 2,
 };
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeClarifications } from './clarifications';
+import type { NarrativeInsights } from '../../../language/src/storyflow/narrative.js';
 
 const sampleConverted = JSON.stringify({
   flow: 'Sample Flow',
@@ -51,6 +52,24 @@ describe('computeClarifications', () => {
     const summary = computeClarifications('Flow: Email Broadcast\nSend newsletter to customers\nStop', JSON.stringify({ steps: [] }));
 
     expect(summary.prompts.some(prompt => prompt.id === 'missing-variables')).toBe(true);
+  });
+
+  it('merges derived actors when precomputed insights are empty', () => {
+    const story = `Flow: Incident Response
+Ask on_call_sre to validate alert
+Do: initiate incident bridge
+Stop`;
+
+    const precomputed: NarrativeInsights = {
+      actors: [],
+      intents: [],
+      variables: [],
+    };
+
+    const summary = computeClarifications(story, sampleConverted, precomputed);
+
+    expect(summary.insights.actors).toContain('on call sre');
+    expect(summary.warnings).not.toContain('No actors identified');
   });
 
   it('extracts actors from inline SimpleScript YAML', () => {

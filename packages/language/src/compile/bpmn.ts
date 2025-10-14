@@ -47,6 +47,8 @@ const BPMN_NS = {
 };
 
 
+type WaitState = Extract<IRState, { kind: 'wait' }>;
+
 export function irToBpmnXml(ir: IR): string {
   const stateMap = new Map(ir.states.map(state => [state.id, state] as const));
   if (!stateMap.size) {
@@ -65,10 +67,23 @@ export function irToBpmnXml(ir: IR): string {
     }
   }
 
+  const messageDefs = new Map<string, { id: string; name: string }>();
+
+  const ensureMessage = (raw: string): string => {
+    const label = raw || 'event';
+    const id = `Message_${sanitize(label) || 'Event'}`;
+    if (!messageDefs.has(id)) {
+      messageDefs.set(id, { id, name: formatLaneLabel(label) || label });
+    }
+    return id;
+  };
+
+  // Track lane order by first appearance in IR states for predictable DI layout
   const laneRecords: LaneRecord[] = [];
   const laneLookup = new Map<string, LaneRecord>();
   const laneAliases = new Map<string, LaneRecord>();
   const elementLaneById = new Map<string, LaneRecord>();
+  const laneOrder: string[] = [];
 
   const ensureLane = (name: string, kind: LaneRecord['kind'] = 'system'): LaneRecord => {
     const displayName = formatLaneLabel(name) || 'System Automation';
@@ -78,12 +93,14 @@ export function irToBpmnXml(ir: IR): string {
       record = {
         id: `Lane_${sanitize(displayName) || 'Default'}`,
         name: displayName,
-        index: laneRecords.length,
+        index: laneRecords.length, // will be updated after all lanes are collected
         kind,
         flowNodeRefs: [],
       };
       laneLookup.set(lookupKey, record);
       laneRecords.push(record);
+      // Track first appearance order for DI
+      if (!laneOrder.includes(lookupKey)) laneOrder.push(lookupKey);
     }
     return record;
   };
@@ -131,8 +148,14 @@ export function irToBpmnXml(ir: IR): string {
       case 'choice':
       case 'parallel':
         return ensureLane('Control Flow', 'control');
-      case 'wait':
+      case 'wait': {
+        const waitState = state as WaitState;
+        const waitKind = classifyWaitEvent(waitState);
+        if (waitKind === 'message') {
+          return ensureLane('External Partners', 'external');
+        }
         return ensureLane('Timers', 'system');
+      }
       case 'stop':
       case 'task':
       default:
@@ -154,6 +177,11 @@ export function irToBpmnXml(ir: IR): string {
   const parallelJoinByParallelId = new Map<string, BpmnElement>();
   const joinGatewayByTargetState = new Map<string, BpmnElement>();
 
+  const startState = stateMap.get(ir.start);
+  if (!startState) {
+    throw new Error(`Unknown start state "${ir.start}"`);
+  }
+
   const registerElement = (state: IRState): BpmnElement => {
     const existing = elementByState.get(state.id);
     if (existing) return existing;
@@ -162,8 +190,27 @@ export function irToBpmnXml(ir: IR): string {
     elements.push(element);
   elementStateById.set(element.id, state.id);
 
-  const lane = resolveLaneForState(state);
+  let lane = resolveLaneForState(state);
+    if (state.kind === 'wait' && state.attachedTo) {
+      const attachedState = stateMap.get(state.attachedTo);
+      if (attachedState) {
+        lane = resolveLaneForState(attachedState);
+      }
+    }
   assignElementToLane(element.id, lane);
+
+    if (state.kind === 'wait' && state.attachedTo) {
+      const attachedElement = ensureStateElement(state.attachedTo);
+      element.attributes = {
+        ...(element.attributes ?? {}),
+        attachedToRef: attachedElement.id,
+        cancelActivity: state.interrupting === false ? 'false' : 'true',
+      };
+      const attachedLane = elementLaneById.get(attachedElement.id);
+      if (attachedLane) {
+        assignElementToLane(element.id, attachedLane);
+      }
+    }
 
     if (state.kind === 'parallel') {
       const base = sanitize(state.id || 'parallel');
@@ -214,25 +261,41 @@ export function irToBpmnXml(ir: IR): string {
           name: state.prompt,
         };
       case 'send':
+        {
+          const messageId = ensureMessage(state.id ?? state.message ?? state.channel);
         return {
           ...baseElement,
           id: `SendTask_${base}`,
           tag: 'bpmn:sendTask',
           name: `Send via ${state.channel}`,
+            attributes: { messageRef: messageId },
           body: [
             `<bpmn:documentation>${escapeXml(
               `To ${state.to}: ${state.message}`,
             )}</bpmn:documentation>`,
           ],
         };
+        }
       case 'receive':
+        {
+          const messageId = ensureMessage(state.event);
+          if (state.id === ir.start) {
+            return {
+              ...baseElement,
+              id: `StartEvent_${base}`,
+              tag: 'bpmn:startEvent',
+              name: `Start: ${formatLaneLabel(state.event) || state.event}`,
+              body: [`<bpmn:messageEventDefinition messageRef="${messageId}" />`],
+            };
+          }
         return {
           ...baseElement,
           id: `IntermediateCatchEvent_${base}`,
           tag: 'bpmn:intermediateCatchEvent',
           name: `Wait for ${state.event}`,
-          body: ['<bpmn:messageEventDefinition />'],
+            body: [`<bpmn:messageEventDefinition messageRef="${messageId}" />`],
         };
+        }
       case 'choice':
         return {
           ...baseElement,
@@ -252,24 +315,63 @@ export function irToBpmnXml(ir: IR): string {
           id: `ParallelGateway_${base}`,
           tag: 'bpmn:parallelGateway',
         };
-      case 'wait':
-        const timerBody = state.until
-          ? `<bpmn:timeDate>${escapeXml(state.until)}</bpmn:timeDate>`
-          : `<bpmn:timeDuration>${formatDuration(state.delayMs!)}</bpmn:timeDuration>`;
+      case 'wait': {
+        const waitState = state as WaitState;
+        const waitKind = classifyWaitEvent(waitState);
+        const waitName =
+          waitState.name ??
+          (waitKind === 'timerDuration'
+            ? `Wait ${formatDuration(waitState.delayMs ?? 0)}`
+            : waitState.until
+            ? `Wait for ${waitState.until}`
+            : 'Wait');
+
+        const eventDefinition = (() => {
+          switch (waitKind) {
+            case 'timerDuration': {
+              const durationMs = Math.max(0, waitState.delayMs ?? 0);
+              return `<bpmn:timerEventDefinition><bpmn:timeDuration>${formatDuration(durationMs)}</bpmn:timeDuration></bpmn:timerEventDefinition>`;
+            }
+            case 'timerDate': {
+              const until = waitState.until?.trim() ?? '';
+              return `<bpmn:timerEventDefinition><bpmn:timeDate>${escapeXml(until)}</bpmn:timeDate></bpmn:timerEventDefinition>`;
+            }
+            case 'message':
+            default: {
+              const label = waitState.until?.trim() || waitState.name || waitState.id;
+              const messageId = ensureMessage(label);
+              return `<bpmn:messageEventDefinition messageRef="${messageId}" />`;
+            }
+          }
+        })();
+
+        if (waitState.attachedTo) {
+          return {
+            ...baseElement,
+            id: `BoundaryEvent_${base}`,
+            tag: 'bpmn:boundaryEvent',
+            name: waitName,
+            attributes: {
+              attachedToRef: waitState.attachedTo,
+              cancelActivity: waitState.interrupting === false ? 'false' : 'true',
+            },
+            body: [eventDefinition],
+          };
+        }
         return {
           ...baseElement,
           id: `IntermediateCatchEvent_${base}`,
           tag: 'bpmn:intermediateCatchEvent',
-          name: state.until ? `Wait until ${state.until}` : state.delayMs ? `Wait ${formatDuration(state.delayMs)}` : 'Wait',
-          body: [`<bpmn:timerEventDefinition>${timerBody}</bpmn:timerEventDefinition>`],
+          name: waitName,
+          body: [eventDefinition],
         };
+      }
       case 'stop':
         return {
           ...baseElement,
           id: `EndEvent_${base}`,
           tag: 'bpmn:endEvent',
           name: state.reason ?? 'End',
-          body: ['<bpmn:terminateEventDefinition />'],
         };
       default:
         // Exhaustive guard to satisfy TypeScript
@@ -306,8 +408,9 @@ export function irToBpmnXml(ir: IR): string {
       sourceRef: source.id,
       targetRef: target.id,
     };
-    if (options?.condition) {
-      flow.conditionExpression = options.condition;
+    const normalizedCondition = normalizeConditionExpression(options?.condition);
+    if (normalizedCondition) {
+      flow.conditionExpression = normalizedCondition;
     }
     flows.push(flow);
     source.outgoing.push(flowId);
@@ -323,21 +426,34 @@ export function irToBpmnXml(ir: IR): string {
     registerElement(state);
   }
 
-  const startElement: BpmnElement = {
-    id: `StartEvent_${sanitize(ir.start)}`,
-    tag: 'bpmn:startEvent',
-    name: 'Start',
-    incoming: [],
-    outgoing: [],
-  };
+  const startStateElement = elementByState.get(ir.start) ?? registerElement(startState);
 
-  const startLane = ensureLane('Control Flow', 'control');
-  assignElementToLane(startElement.id, startLane);
+  let startElement: BpmnElement | undefined;
+  const processElements: BpmnElement[] = [];
 
-  const processElements: BpmnElement[] = [startElement, ...elements];
+  if (startState.kind === 'receive') {
+    processElements.push(startStateElement);
+  } else {
+    startElement = {
+      id: `StartEvent_${sanitize(ir.start)}`,
+      tag: 'bpmn:startEvent',
+      name: 'Start',
+      incoming: [],
+      outgoing: [],
+    };
+    const startLane = ensureLane('Control Flow', 'control');
+    assignElementToLane(startElement.id, startLane);
+    processElements.push(startElement);
 
-  // Wire start event to the initial state
-  addSequenceFlow(startElement, ir.start);
+    // Wire start event to the initial state
+    addSequenceFlow(startElement, ir.start);
+  }
+
+  for (const element of elements) {
+    if (!processElements.includes(element)) {
+      processElements.push(element);
+    }
+  }
 
   for (const state of ir.states) {
     const element = ensureStateElement(state.id);
@@ -426,7 +542,13 @@ export function irToBpmnXml(ir: IR): string {
     })
     .join('\n');
 
-  const activeLanes = laneRecords.filter(lane => lane.flowNodeRefs.length).sort((a, b) => a.index - b.index);
+  // After all elements are assigned, re-index lanes by first appearance in IR states for DI order
+  let activeLanes = laneRecords.filter(lane => lane.flowNodeRefs.length);
+  if (laneOrder.length) {
+    activeLanes = activeLanes.slice().sort((a, b) => laneOrder.indexOf(a.name.toLowerCase()) - laneOrder.indexOf(b.name.toLowerCase()));
+    // Update index for DI
+    activeLanes.forEach((lane, idx) => (lane.index = idx));
+  }
 
   const laneSetXml = activeLanes.length
     ? [
@@ -447,20 +569,63 @@ export function irToBpmnXml(ir: IR): string {
     : '';
 
   const LANE_WIDTH = 320;
-  const NODE_WIDTH = 140;
-  const NODE_HEIGHT = 60;
-  const LANE_PADDING_TOP = 60;
-  const NODE_VERTICAL_GAP = 120;
-  const NODE_HORIZONTAL_OFFSET = 90;
+  const LANE_PADDING_TOP = 80;
+  const NODE_VERTICAL_GAP = 140;
+
+  const TASK_DIMENSIONS = { width: 180, height: 90 } as const;
+  const EVENT_DIMENSIONS = { width: 42, height: 42 } as const;
+  const GATEWAY_DIMENSIONS = { width: 70, height: 70 } as const;
+  const BOUNDARY_DIMENSIONS = { width: 36, height: 36 } as const;
+
+  const getElementDimensions = (element: BpmnElement): { width: number; height: number } => {
+    const tag = element.tag.toLowerCase();
+    if (tag === 'bpmn:startevent' || tag === 'bpmn:endevent') {
+      return EVENT_DIMENSIONS;
+    }
+    if (tag === 'bpmn:intermediatecatchevent') {
+      return { width: 48, height: 48 };
+    }
+    if (tag === 'bpmn:boundaryevent') {
+      return BOUNDARY_DIMENSIONS;
+    }
+    if (tag === 'bpmn:exclusivegateway' || tag === 'bpmn:parallelgateway') {
+      return GATEWAY_DIMENSIONS;
+    }
+    if (tag === 'bpmn:sendtask' || tag === 'bpmn:receivetask' || tag === 'bpmn:usertask' || tag === 'bpmn:servicetask') {
+      return TASK_DIMENSIONS;
+    }
+    return TASK_DIMENSIONS;
+  };
+
+  const fallbackLane = elementLaneById.get(startStateElement.id) ?? ensureLane('Control Flow', 'control');
 
   const elementBounds = new Map<string, Bounds>();
-  processElements.forEach((element, index) => {
-    const lane = elementLaneById.get(element.id) ?? startLane;
+  const laneOffsets = new Map<string, number>();
+  processElements.forEach((element) => {
+    const lane = elementLaneById.get(element.id) ?? fallbackLane;
     const laneIndex = lane.index;
-    const x = laneIndex * LANE_WIDTH + NODE_HORIZONTAL_OFFSET;
-    const y = LANE_PADDING_TOP + index * NODE_VERTICAL_GAP;
-    elementBounds.set(element.id, { x, y, width: NODE_WIDTH, height: NODE_HEIGHT });
+    const { width, height } = getElementDimensions(element);
+    const previousOffset = laneOffsets.get(lane.id) ?? LANE_PADDING_TOP;
+    const x = laneIndex * LANE_WIDTH + (LANE_WIDTH - width) / 2;
+    const y = previousOffset;
+    laneOffsets.set(lane.id, y + height + NODE_VERTICAL_GAP);
+    elementBounds.set(element.id, { x, y, width, height });
   });
+
+  for (const element of processElements) {
+    if (element.tag === 'bpmn:boundaryEvent') {
+      const attachedId = element.attributes?.attachedToRef;
+      const attachedBounds = attachedId ? elementBounds.get(attachedId) : undefined;
+      if (attachedBounds) {
+        elementBounds.set(element.id, {
+          x: attachedBounds.x + attachedBounds.width - BOUNDARY_DIMENSIONS.width / 2,
+          y: attachedBounds.y + attachedBounds.height - BOUNDARY_DIMENSIONS.height / 2,
+          width: BOUNDARY_DIMENSIONS.width,
+          height: BOUNDARY_DIMENSIONS.height,
+        });
+      }
+    }
+  }
 
   let maxBottom = 0;
   for (const bounds of elementBounds.values()) {
@@ -524,6 +689,12 @@ export function irToBpmnXml(ir: IR): string {
   const isExecutable = ir.metadata?.executable ? 'true' : 'false';
   const processSections = [laneSetXml, elementXml, flowXml].filter(Boolean).join('\n');
 
+  const messagesXml = messageDefs.size
+    ? Array.from(messageDefs.values())
+        .map(message => `  <bpmn:message id="${message.id}" name="${escapeXml(message.name)}" />`)
+        .join('\n')
+    : '';
+
   const xmlParts = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     `<${BPMN_NS.definitions} id="Definitions_${sanitize(ir.name)}" targetNamespace="https://kflow.dev/bpmn">`,
@@ -532,6 +703,10 @@ export function irToBpmnXml(ir: IR): string {
     '  </bpmn:process>',
   ];
 
+  if (messagesXml) {
+    xmlParts.push(messagesXml);
+  }
+
   if (diagramXml) {
     xmlParts.push(diagramXml);
   }
@@ -539,6 +714,36 @@ export function irToBpmnXml(ir: IR): string {
   xmlParts.push('</bpmn:definitions>');
 
   return xmlParts.join('\n');
+}
+
+type WaitEventKind = 'timerDuration' | 'timerDate' | 'message';
+
+function classifyWaitEvent(state: WaitState): WaitEventKind {
+  if (isPositiveNumber(state.delayMs)) {
+    return 'timerDuration';
+  }
+
+  const until = state.until?.trim();
+  if (until && isIsoLikeDate(until)) {
+    return 'timerDate';
+  }
+
+  return 'message';
+}
+
+function isPositiveNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function isIsoLikeDate(value: string): boolean {
+  const trimmed = value.trim();
+  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(trimmed)) {
+    return false;
+  }
+
+  const normalized = trimmed.includes(' ') && !trimmed.includes('T') ? trimmed.replace(' ', 'T') : trimmed;
+  const timestamp = Date.parse(normalized);
+  return Number.isFinite(timestamp);
 }
 
 function formatDuration(ms: number): string {
@@ -577,6 +782,9 @@ function validateIr(ir: IR, stateMap: Map<string, IRState>) {
       case 'wait':
         if (!state.until && !(typeof state.delayMs === 'number' && state.delayMs > 0)) {
           throw new Error(`Wait state "${state.id}" must specify either "until" or a positive "delayMs"`);
+        }
+        if (state.attachedTo) {
+          assertStateExists(state.id, state.attachedTo, 'attachedTo');
         }
         assertStateExists(state.id, state.next, 'next state');
         break;
@@ -624,7 +832,10 @@ function validateIr(ir: IR, stateMap: Map<string, IRState>) {
 
 function formatLaneLabel(raw: string | undefined): string {
   if (!raw) return '';
-  const normalized = raw.replace(/[_-]+/g, ' ').trim();
+  const normalized = raw
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .trim();
   if (!normalized) return '';
   return normalized
     .split(/\s+/)
@@ -639,24 +850,105 @@ function formatCaseCondition(expression: string, rawValue: string): string {
     return expr;
   }
   if (/^(['"]).*\1$/.test(value) || /^-?\d+(?:\.\d+)?$/.test(value)) {
-    return `${expr} === ${value}`;
+    return `${expr} == ${value}`;
   }
   const escaped = value.replace(/"/g, '\\"');
-  return `${expr} === "${escaped}"`;
+  return `${expr} == "${escaped}"`;
+}
+
+function normalizeConditionExpression(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  let text = raw.trim();
+  if (!text) return undefined;
+  if (/^\$\{.*\}$/.test(text)) {
+    return text;
+  }
+  text = text.replace(/\{([^}]+)\}/g, (_, expr: string) => expr.trim());
+  text = text.replace(/===/g, '==');
+  return '${' + text + '}';
+}
+
+type DockDirection = 'left' | 'right' | 'top' | 'bottom';
+
+function center(bounds: Bounds): Waypoint {
+  return {
+    x: bounds.x + bounds.width / 2,
+    y: bounds.y + bounds.height / 2,
+  };
+}
+
+function dock(bounds: Bounds, reference: Bounds): { point: Waypoint; direction: DockDirection } {
+  const c1 = center(bounds);
+  const c2 = center(reference);
+  const dx = c2.x - c1.x;
+  const dy = c2.y - c1.y;
+  const horizontal = Math.abs(dx) >= Math.abs(dy);
+
+  if (horizontal) {
+    if (dx >= 0) {
+      return {
+        point: { x: bounds.x + bounds.width, y: clamp(c2.y, bounds.y, bounds.y + bounds.height) },
+        direction: 'right',
+      };
+    }
+    return {
+      point: { x: bounds.x, y: clamp(c2.y, bounds.y, bounds.y + bounds.height) },
+      direction: 'left',
+    };
+  }
+
+  if (dy >= 0) {
+    return {
+      point: { x: clamp(c2.x, bounds.x, bounds.x + bounds.width), y: bounds.y + bounds.height },
+      direction: 'bottom',
+    };
+  }
+
+  return {
+    point: { x: clamp(c2.x, bounds.x, bounds.x + bounds.width), y: bounds.y },
+    direction: 'top',
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function computeWaypoints(source: Bounds, target: Bounds): Waypoint[] {
-  const start: Waypoint = {
-    x: source.x + source.width,
-    y: source.y + source.height / 2,
-  };
-  const end: Waypoint = {
-    x: target.x,
-    y: target.y + target.height / 2,
-  };
-  if (Math.abs(end.x - start.x) < 40) {
-    return [start, end];
+  const startDock = dock(source, target);
+  const endDock = dock(target, source);
+  const start = startDock.point;
+  const end = endDock.point;
+
+  const waypoints: Waypoint[] = [start];
+
+  if (startDock.direction === 'right' && endDock.direction === 'left') {
+    const midX = (start.x + end.x) / 2;
+    waypoints.push({ x: midX, y: start.y });
+    waypoints.push({ x: midX, y: end.y });
+  } else if (startDock.direction === 'left' && endDock.direction === 'right') {
+    const midX = (start.x + end.x) / 2;
+    waypoints.push({ x: midX, y: start.y });
+    waypoints.push({ x: midX, y: end.y });
+  } else if (startDock.direction === 'bottom' && endDock.direction === 'top') {
+    const midY = (start.y + end.y) / 2;
+    waypoints.push({ x: start.x, y: midY });
+    waypoints.push({ x: end.x, y: midY });
+  } else if (startDock.direction === 'top' && endDock.direction === 'bottom') {
+    const midY = (start.y + end.y) / 2;
+    waypoints.push({ x: start.x, y: midY });
+    waypoints.push({ x: end.x, y: midY });
+  } else {
+    const midPoint: Waypoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+    waypoints.push(midPoint);
   }
-  const midX = (start.x + end.x) / 2;
-  return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
+
+  waypoints.push(end);
+
+  // Remove consecutive duplicates to keep DI tidy
+  return waypoints.filter((point, index, arr) => {
+    if (index === 0) return true;
+    const prev = arr[index - 1];
+    return prev.x !== point.x || prev.y !== point.y;
+  });
 }
