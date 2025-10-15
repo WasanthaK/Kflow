@@ -787,30 +787,82 @@ export function irToBpmnXml(ir: IR): string {
     
     const { width, height } = getElementDimensions(element);
     
-    // Calculate Y position based on layer
-    const y = LANE_PADDING_TOP + layer * (TASK_DIMENSIONS.height + NODE_VERTICAL_GAP);
+    // Calculate Y position based on layer with extra padding for first layer
+    const firstLayerPadding = layer === 0 ? 20 : 0; // Extra padding for start events
+    const y = LANE_PADDING_TOP + firstLayerPadding + layer * (TASK_DIMENSIONS.height + NODE_VERTICAL_GAP);
     
     // Calculate X position: center in lane, then offset based on position
-    const laneCenter = laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
+    const laneStart = laneIndex * LANE_WIDTH;
+    const laneCenter = laneStart + LANE_WIDTH / 2;
     const layerNodes = laneLayerGroups.get(lane.id)?.get(layer) || [element.id];
     const totalNodesInLayer = layerNodes.length;
     
     // If multiple nodes in same lane+layer, spread them horizontally
     let x: number;
     if (totalNodesInLayer === 1) {
+      // Single node: center it in the lane
       x = laneCenter - width / 2;
     } else {
-      // Calculate offset from center based on position
+      // Multiple nodes: distribute evenly with proper spacing
       const indexInLayer = layerNodes.indexOf(element.id);
-      const totalWidth = totalNodesInLayer * width + (totalNodesInLayer - 1) * 20; // 20px gap between nodes
-      const startX = laneCenter - totalWidth / 2;
-      x = startX + indexInLayer * (width + 20);
+      const gap = Math.min(NODE_HORIZONTAL_GAP / 2, 30); // Smaller gap for multiple nodes
+      const totalWidth = totalNodesInLayer * width + (totalNodesInLayer - 1) * gap;
       
-      // Keep within lane bounds
-      x = Math.max(laneIndex * LANE_WIDTH + 10, Math.min(x, (laneIndex + 1) * LANE_WIDTH - width - 10));
+      // Check if total width fits in lane
+      const availableWidth = LANE_WIDTH - 40; // 20px margin on each side
+      if (totalWidth <= availableWidth) {
+        // Fits: center the group in the lane
+        const startX = laneCenter - totalWidth / 2;
+        x = startX + indexInLayer * (width + gap);
+      } else {
+        // Doesn't fit: compress spacing
+        const compressedGap = Math.max(10, (availableWidth - totalNodesInLayer * width) / (totalNodesInLayer - 1));
+        const compressedWidth = totalNodesInLayer * width + (totalNodesInLayer - 1) * compressedGap;
+        const startX = laneStart + (LANE_WIDTH - compressedWidth) / 2;
+        x = startX + indexInLayer * (width + compressedGap);
+      }
+      
+      // Ensure within lane bounds with proper margins
+      const minX = laneStart + 20;
+      const maxX = laneStart + LANE_WIDTH - width - 20;
+      x = Math.max(minX, Math.min(x, maxX));
     }
     
     elementBounds.set(element.id, { x, y, width, height });
+  });
+
+  // Post-process: Fix overlapping nodes in the same lane
+  // Group nodes by lane and sort by Y position
+  const nodesByLane = new Map<string, Array<{ id: string; bounds: Bounds }>>();
+  processElements.forEach(element => {
+    const lane = elementLaneById.get(element.id) ?? fallbackLane;
+    const bounds = elementBounds.get(element.id);
+    if (!bounds) return;
+    
+    if (!nodesByLane.has(lane.id)) {
+      nodesByLane.set(lane.id, []);
+    }
+    nodesByLane.get(lane.id)!.push({ id: element.id, bounds });
+  });
+  
+  // Check for overlaps within each lane and adjust Y positions
+  nodesByLane.forEach((nodes) => {
+    nodes.sort((a, b) => a.bounds.y - b.bounds.y);
+    
+    for (let i = 1; i < nodes.length; i++) {
+      const prev = nodes[i - 1].bounds;
+      const curr = nodes[i].bounds;
+      const minGap = 100; // Minimum vertical gap between nodes for better readability
+      
+      // Check if current node overlaps with or is too close to previous node
+      const prevBottom = prev.y + prev.height;
+      if (curr.y < prevBottom + minGap) {
+        // Adjust current node's Y position to avoid overlap
+        const newY = prevBottom + minGap;
+        curr.y = newY;
+        elementBounds.set(nodes[i].id, curr);
+      }
+    }
   });
 
   for (const element of processElements) {
@@ -1121,27 +1173,62 @@ function computeWaypoints(source: Bounds, target: Bounds): Waypoint[] {
   
   const waypoints: Waypoint[] = [];
   
-  // For layer-based layout, use simple orthogonal routing
-  // Exit from bottom of source, enter from top of target (normal forward flow)
+  // For layer-based vertical layout, ALWAYS use bottom→top routing
+  // BPMN.js will auto-adjust the first/last points to actual anchors
+  
   const sourceBottom: Waypoint = { x: sourceCenter.x, y: source.y + source.height };
   const targetTop: Waypoint = { x: targetCenter.x, y: target.y };
   
-  waypoints.push(sourceBottom);
+  // Check if this is a backward flow (target is above source)
+  const isBackward = target.y < source.y;
   
-  // If nodes are in different horizontal positions, add intermediate points
-  if (Math.abs(sourceCenter.x - targetCenter.x) > 5) {
-    // Add vertical segment down from source
-    const midY = sourceBottom.y + (targetTop.y - sourceBottom.y) * 0.5;
-    waypoints.push({ x: sourceCenter.x, y: midY });
-    waypoints.push({ x: targetCenter.x, y: midY });
+  if (isBackward) {
+    // Backward flow: exit from top, enter from bottom
+    const sourceTop: Waypoint = { x: sourceCenter.x, y: source.y };
+    const targetBottom: Waypoint = { x: targetCenter.x, y: target.y + target.height };
+    
+    waypoints.push(sourceTop);
+    
+    if (Math.abs(sourceCenter.x - targetCenter.x) > 5) {
+      const midY = (sourceTop.y + targetBottom.y) / 2;
+      waypoints.push({ x: sourceCenter.x, y: midY });
+      waypoints.push({ x: targetCenter.x, y: midY });
+    }
+    
+    waypoints.push(targetBottom);
+  } else {
+    // Normal forward flow: exit from bottom, enter from top
+    // CRITICAL: BPMN.js determines anchors based on the angle of the first/last segments
+    // We need waypoints that create a clearly VERTICAL approach angle
+    
+    const minGap = 50; // Minimum vertical distance to ensure vertical anchor detection
+    const midY = (source.y + source.height + target.y) / 2;
+    
+    // For vertical connections, don't use the exact element edges
+    // Instead, start/end waypoints at element CENTER points
+    // and let BPMN.js auto-snap to the correct vertical anchors
+    
+    waypoints.push(sourceBottom);
+    
+    // If horizontally offset, create orthogonal route
+    if (Math.abs(sourceCenter.x - targetCenter.x) > 1) {
+      // Vertical down from source
+      waypoints.push({ x: sourceCenter.x, y: midY });
+      // Horizontal across
+      waypoints.push({ x: targetCenter.x, y: midY });
+    } else {
+      // Nodes aligned vertically - ensure clear vertical path
+      // Add waypoint at midpoint to ensure vertical routing
+      waypoints.push({ x: sourceCenter.x, y: midY });
+    }
+    
+    waypoints.push(targetTop);
   }
   
-  waypoints.push(targetTop);
-  
-  // Remove consecutive duplicates
+  // Remove exact duplicates only (keep all routing points)
   return waypoints.filter((point, index, arr) => {
     if (index === 0) return true;
     const prev = arr[index - 1];
-    return Math.abs(prev.x - point.x) > 0.1 || Math.abs(prev.y - point.y) > 0.1;
+    return point.x !== prev.x || point.y !== prev.y;
   });
 }

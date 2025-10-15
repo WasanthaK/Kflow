@@ -51,7 +51,7 @@ export function DualTabPanel(props: DualTabPanelProps) {
   const renderTabContent = (tab: TabType) => {
     switch (tab) {
       case 'bpmn':
-        return <BpmnDiagram xml={props.bpmnXml || undefined} />;
+        return <BpmnDiagram xml={props.bpmnXml || undefined} useAutoLayout={false} />;
       
       case 'ir':
         return props.irJson ? (

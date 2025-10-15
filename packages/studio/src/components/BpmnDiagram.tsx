@@ -198,7 +198,8 @@ export const BpmnDiagram: React.FC<BpmnDiagramProps> = ({ xml, autoFit = true, u
         }
 
         await applyElementStyling(modeler);
-        layoutConnections(modeler);
+        // Don't call layoutConnections - it overrides our carefully crafted waypoints from bpmn.ts
+        // layoutConnections(modeler);
 
         setStatus('ready');
         setMessage('');
