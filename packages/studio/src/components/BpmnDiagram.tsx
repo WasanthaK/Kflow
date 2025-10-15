@@ -7,13 +7,15 @@ import './bpmn-theme.css';
 type BpmnDiagramProps = {
   xml?: string | null;
   autoFit?: boolean;
+  useAutoLayout?: boolean;
 };
 
-export const BpmnDiagram: React.FC<BpmnDiagramProps> = ({ xml, autoFit = true }) => {
+export const BpmnDiagram: React.FC<BpmnDiagramProps> = ({ xml, autoFit = true, useAutoLayout = false }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const modelerRef = useRef<any>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'empty'>(xml ? 'idle' : 'empty');
   const [message, setMessage] = useState<string>('');
+  const [layoutApplied, setLayoutApplied] = useState(false);
 
   const applyElementStyling = async (modeler: any) => {
     try {
@@ -51,6 +53,24 @@ export const BpmnDiagram: React.FC<BpmnDiagramProps> = ({ xml, autoFit = true })
     }
   };
 
+  const applyAutoLayout = async (xml: string): Promise<string> => {
+    try {
+      // Dynamic import of bpmn-auto-layout
+      // @ts-ignore - bpmn-auto-layout doesn't have type definitions
+      const autoLayoutModule = await import('bpmn-auto-layout');
+      const autoLayout = autoLayoutModule.default || autoLayoutModule;
+      console.log('Applying bpmn-auto-layout...');
+      const layoutedXml = await autoLayout(xml);
+      console.log('Auto-layout applied successfully');
+      setLayoutApplied(true);
+      return layoutedXml;
+    } catch (error) {
+      console.error('Auto-layout failed:', error);
+      setLayoutApplied(false);
+      return xml;
+    }
+  };
+
   const layoutConnections = (modeler: any) => {
     try {
       const elementRegistry = modeler.get('elementRegistry');
@@ -61,13 +81,49 @@ export const BpmnDiagram: React.FC<BpmnDiagramProps> = ({ xml, autoFit = true })
           element && typeof element.type === 'string' &&
           (element.type === 'bpmn:SequenceFlow' || element.type === 'bpmn:MessageFlow' || element.type === 'bpmn:Association')
         );
+      
+      console.log(`Laying out ${connections.length} connections...`);
+      
       connections.forEach((connection: any) => {
         try {
+          // First, try the built-in layout
           modeling.layoutConnection(connection);
+          
+          // Then, add manual waypoints to avoid overlaps if needed
+          if (connection.waypoints && connection.waypoints.length > 2) {
+            // Connection already has waypoints from auto-layout or manual placement
+            return;
+          }
+          
+          // For connections without waypoints, try to add some based on direction
+          const source = connection.source;
+          const target = connection.target;
+          if (source && target) {
+            const dx = target.x - source.x;
+            const dy = target.y - source.y;
+            
+            // If the connection goes backwards or has complex routing needs, add waypoints
+            if (dx < 0 || Math.abs(dy) > 200) {
+              try {
+                const midX = source.x + dx / 2;
+                const midY = source.y + dy / 2;
+                modeling.updateWaypoints(connection, [
+                  { x: source.x + source.width, y: source.y + source.height / 2 },
+                  { x: midX, y: source.y + source.height / 2 },
+                  { x: midX, y: target.y + target.height / 2 },
+                  { x: target.x, y: target.y + target.height / 2 }
+                ]);
+              } catch (e) {
+                // Ignore waypoint update errors
+              }
+            }
+          }
         } catch (error) {
           console.warn('Failed to layout BPMN connection', connection, error);
         }
       });
+      
+      console.log('Connection layout completed');
     } catch (error) {
       console.warn('Unable to layout BPMN connections', error);
     }
@@ -109,6 +165,16 @@ export const BpmnDiagram: React.FC<BpmnDiagramProps> = ({ xml, autoFit = true })
           return;
         }
 
+        // Apply auto-layout to improve readability
+        let layoutedXml = xml;
+        if (useAutoLayout) {
+          try {
+            layoutedXml = await applyAutoLayout(xml);
+          } catch (error) {
+            console.warn('Auto-layout failed, using original XML:', error);
+          }
+        }
+
         let modeler = modelerRef.current;
         if (!modeler) {
           modeler = new BpmnModeler({
@@ -119,7 +185,7 @@ export const BpmnDiagram: React.FC<BpmnDiagramProps> = ({ xml, autoFit = true })
           modelerRef.current = modeler;
         }
 
-        await modeler.importXML(xml);
+        await modeler.importXML(layoutedXml);
         if (cancelled) {
           return;
         }

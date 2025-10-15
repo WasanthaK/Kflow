@@ -46,6 +46,14 @@ const BPMN_NS = {
     'bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI"',
 };
 
+// Graph layout types
+type GraphNode = {
+  id: string;
+  element: BpmnElement;
+  layer: number;
+  positionInLayer: number;
+  lane: LaneRecord;
+};
 
 type WaitState = Extract<IRState, { kind: 'wait' }>;
 
@@ -568,9 +576,158 @@ export function irToBpmnXml(ir: IR): string {
       ].join('\n')
     : '';
 
+  // === LAYERED GRAPH LAYOUT ALGORITHM ===
+  
+  /**
+   * Assigns each node to a layer using a topological sort approach.
+   * Nodes with no predecessors go to layer 0, and each node is placed
+   * at the maximum layer of its predecessors + 1.
+   */
+  const assignLayers = (elements: BpmnElement[], flows: SequenceFlow[]): Map<string, number> => {
+    const layers = new Map<string, number>();
+    const inDegree = new Map<string, number>();
+    const outgoing = new Map<string, string[]>();
+    
+    // Build adjacency list and in-degree count
+    elements.forEach(el => {
+      inDegree.set(el.id, 0);
+      outgoing.set(el.id, []);
+    });
+    
+    flows.forEach(flow => {
+      inDegree.set(flow.targetRef, (inDegree.get(flow.targetRef) || 0) + 1);
+      const targets = outgoing.get(flow.sourceRef) || [];
+      targets.push(flow.targetRef);
+      outgoing.set(flow.sourceRef, targets);
+    });
+    
+    // Find all nodes with no incoming edges (start nodes)
+    const queue: string[] = [];
+    elements.forEach(el => {
+      if (inDegree.get(el.id) === 0) {
+        layers.set(el.id, 0);
+        queue.push(el.id);
+      }
+    });
+    
+    // Process nodes layer by layer
+    while (queue.length > 0) {
+      const nodeId = queue.shift()!;
+      const currentLayer = layers.get(nodeId) || 0;
+      
+      const targets = outgoing.get(nodeId) || [];
+      targets.forEach(targetId => {
+        const currentTargetLayer = layers.get(targetId);
+        const newLayer = currentLayer + 1;
+        
+        // Place target at max layer of all predecessors + 1
+        if (currentTargetLayer === undefined || newLayer > currentTargetLayer) {
+          layers.set(targetId, newLayer);
+        }
+        
+        // Decrease in-degree and add to queue if all predecessors processed
+        const degree = inDegree.get(targetId)! - 1;
+        inDegree.set(targetId, degree);
+        if (degree === 0) {
+          queue.push(targetId);
+        }
+      });
+    }
+    
+    // Handle any remaining nodes (cycles or disconnected)
+    elements.forEach(el => {
+      if (!layers.has(el.id)) {
+        layers.set(el.id, 0);
+      }
+    });
+    
+    return layers;
+  };
+
+  /**
+   * Orders nodes within each layer to minimize edge crossings.
+   * Uses barycenter heuristic: position based on average position of neighbors.
+   */
+  const orderNodesInLayers = (
+    layerMap: Map<string, number>,
+    elements: BpmnElement[],
+    flows: SequenceFlow[]
+  ): Map<string, number> => {
+    const positions = new Map<string, number>();
+    const maxLayer = Math.max(...Array.from(layerMap.values()));
+    
+    // Group nodes by layer
+    const layerNodes = new Map<number, string[]>();
+    for (let i = 0; i <= maxLayer; i++) {
+      layerNodes.set(i, []);
+    }
+    elements.forEach(el => {
+      const layer = layerMap.get(el.id) || 0;
+      layerNodes.get(layer)!.push(el.id);
+    });
+    
+    // Build adjacency
+    const incoming = new Map<string, string[]>();
+    const outgoing = new Map<string, string[]>();
+    elements.forEach(el => {
+      incoming.set(el.id, []);
+      outgoing.set(el.id, []);
+    });
+    flows.forEach(flow => {
+      incoming.get(flow.targetRef)!.push(flow.sourceRef);
+      outgoing.get(flow.sourceRef)!.push(flow.targetRef);
+    });
+    
+    // Initial ordering: just use current order
+    for (let layer = 0; layer <= maxLayer; layer++) {
+      const nodes = layerNodes.get(layer)!;
+      nodes.forEach((nodeId, index) => {
+        positions.set(nodeId, index);
+      });
+    }
+    
+    // Iteratively improve ordering using barycenter heuristic
+    for (let iteration = 0; iteration < 4; iteration++) {
+      // Forward pass: order based on predecessors
+      for (let layer = 1; layer <= maxLayer; layer++) {
+        const nodes = layerNodes.get(layer)!;
+        const barycenters: [string, number][] = nodes.map(nodeId => {
+          const preds = incoming.get(nodeId)!;
+          if (preds.length === 0) return [nodeId, positions.get(nodeId) || 0];
+          const avgPos = preds.reduce((sum, predId) => sum + (positions.get(predId) || 0), 0) / preds.length;
+          return [nodeId, avgPos];
+        });
+        
+        barycenters.sort((a, b) => a[1] - b[1]);
+        barycenters.forEach(([nodeId], index) => {
+          positions.set(nodeId, index);
+        });
+      }
+      
+      // Backward pass: order based on successors
+      for (let layer = maxLayer - 1; layer >= 0; layer--) {
+        const nodes = layerNodes.get(layer)!;
+        const barycenters: [string, number][] = nodes.map(nodeId => {
+          const succs = outgoing.get(nodeId)!;
+          if (succs.length === 0) return [nodeId, positions.get(nodeId) || 0];
+          const avgPos = succs.reduce((sum, succId) => sum + (positions.get(succId) || 0), 0) / succs.length;
+          return [nodeId, avgPos];
+        });
+        
+        barycenters.sort((a, b) => a[1] - b[1]);
+        barycenters.forEach(([nodeId], index) => {
+          positions.set(nodeId, index);
+        });
+      }
+    }
+    
+    return positions;
+  };
+
   const LANE_WIDTH = 320;
   const LANE_PADDING_TOP = 80;
-  const NODE_VERTICAL_GAP = 140;
+  const NODE_VERTICAL_GAP = 200; // Vertical spacing between layers
+  const NODE_HORIZONTAL_GAP = 120; // Horizontal spacing within lane
 
   const TASK_DIMENSIONS = { width: 180, height: 90 } as const;
   const EVENT_DIMENSIONS = { width: 42, height: 42 } as const;
@@ -599,16 +756,60 @@ export function irToBpmnXml(ir: IR): string {
 
   const fallbackLane = elementLaneById.get(startStateElement.id) ?? ensureLane('Control Flow', 'control');
 
+  // === APPLY LAYERED GRAPH LAYOUT ===
+  const layerAssignments = assignLayers(processElements, flows);
+  const positionAssignments = orderNodesInLayers(layerAssignments, processElements, flows);
+  
   const elementBounds = new Map<string, Bounds>();
-  const laneOffsets = new Map<string, number>();
+  
+  // Group elements by lane and layer for positioning
+  const laneLayerGroups = new Map<string, Map<number, string[]>>();
+  processElements.forEach(element => {
+    const lane = elementLaneById.get(element.id) ?? fallbackLane;
+    const layer = layerAssignments.get(element.id) || 0;
+    
+    if (!laneLayerGroups.has(lane.id)) {
+      laneLayerGroups.set(lane.id, new Map());
+    }
+    const layerGroups = laneLayerGroups.get(lane.id)!;
+    if (!layerGroups.has(layer)) {
+      layerGroups.set(layer, []);
+    }
+    layerGroups.get(layer)!.push(element.id);
+  });
+  
+  // Position elements based on layer and position within layer
   processElements.forEach((element) => {
     const lane = elementLaneById.get(element.id) ?? fallbackLane;
     const laneIndex = lane.index;
+    const layer = layerAssignments.get(element.id) || 0;
+    const positionInLayer = positionAssignments.get(element.id) || 0;
+    
     const { width, height } = getElementDimensions(element);
-    const previousOffset = laneOffsets.get(lane.id) ?? LANE_PADDING_TOP;
-    const x = laneIndex * LANE_WIDTH + (LANE_WIDTH - width) / 2;
-    const y = previousOffset;
-    laneOffsets.set(lane.id, y + height + NODE_VERTICAL_GAP);
+    
+    // Calculate Y position based on layer
+    const y = LANE_PADDING_TOP + layer * (TASK_DIMENSIONS.height + NODE_VERTICAL_GAP);
+    
+    // Calculate X position: center in lane, then offset based on position
+    const laneCenter = laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
+    const layerNodes = laneLayerGroups.get(lane.id)?.get(layer) || [element.id];
+    const totalNodesInLayer = layerNodes.length;
+    
+    // If multiple nodes in same lane+layer, spread them horizontally
+    let x: number;
+    if (totalNodesInLayer === 1) {
+      x = laneCenter - width / 2;
+    } else {
+      // Calculate offset from center based on position
+      const indexInLayer = layerNodes.indexOf(element.id);
+      const totalWidth = totalNodesInLayer * width + (totalNodesInLayer - 1) * 20; // 20px gap between nodes
+      const startX = laneCenter - totalWidth / 2;
+      x = startX + indexInLayer * (width + 20);
+      
+      // Keep within lane bounds
+      x = Math.max(laneIndex * LANE_WIDTH + 10, Math.min(x, (laneIndex + 1) * LANE_WIDTH - width - 10));
+    }
+    
     elementBounds.set(element.id, { x, y, width, height });
   });
 
@@ -915,40 +1116,32 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function computeWaypoints(source: Bounds, target: Bounds): Waypoint[] {
-  const startDock = dock(source, target);
-  const endDock = dock(target, source);
-  const start = startDock.point;
-  const end = endDock.point;
-
-  const waypoints: Waypoint[] = [start];
-
-  if (startDock.direction === 'right' && endDock.direction === 'left') {
-    const midX = (start.x + end.x) / 2;
-    waypoints.push({ x: midX, y: start.y });
-    waypoints.push({ x: midX, y: end.y });
-  } else if (startDock.direction === 'left' && endDock.direction === 'right') {
-    const midX = (start.x + end.x) / 2;
-    waypoints.push({ x: midX, y: start.y });
-    waypoints.push({ x: midX, y: end.y });
-  } else if (startDock.direction === 'bottom' && endDock.direction === 'top') {
-    const midY = (start.y + end.y) / 2;
-    waypoints.push({ x: start.x, y: midY });
-    waypoints.push({ x: end.x, y: midY });
-  } else if (startDock.direction === 'top' && endDock.direction === 'bottom') {
-    const midY = (start.y + end.y) / 2;
-    waypoints.push({ x: start.x, y: midY });
-    waypoints.push({ x: end.x, y: midY });
-  } else {
-    const midPoint: Waypoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-    waypoints.push(midPoint);
+  const sourceCenter = center(source);
+  const targetCenter = center(target);
+  
+  const waypoints: Waypoint[] = [];
+  
+  // For layer-based layout, use simple orthogonal routing
+  // Exit from bottom of source, enter from top of target (normal forward flow)
+  const sourceBottom: Waypoint = { x: sourceCenter.x, y: source.y + source.height };
+  const targetTop: Waypoint = { x: targetCenter.x, y: target.y };
+  
+  waypoints.push(sourceBottom);
+  
+  // If nodes are in different horizontal positions, add intermediate points
+  if (Math.abs(sourceCenter.x - targetCenter.x) > 5) {
+    // Add vertical segment down from source
+    const midY = sourceBottom.y + (targetTop.y - sourceBottom.y) * 0.5;
+    waypoints.push({ x: sourceCenter.x, y: midY });
+    waypoints.push({ x: targetCenter.x, y: midY });
   }
-
-  waypoints.push(end);
-
-  // Remove consecutive duplicates to keep DI tidy
+  
+  waypoints.push(targetTop);
+  
+  // Remove consecutive duplicates
   return waypoints.filter((point, index, arr) => {
     if (index === 0) return true;
     const prev = arr[index - 1];
-    return prev.x !== point.x || prev.y !== point.y;
+    return Math.abs(prev.x - point.x) > 0.1 || Math.abs(prev.y - point.y) > 0.1;
   });
 }

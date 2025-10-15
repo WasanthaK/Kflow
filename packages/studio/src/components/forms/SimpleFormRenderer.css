@@ -1,0 +1,412 @@
+/**
+ * Kflow Form Renderer Styles
+ * Clean, accessible, modern form styling
+ */
+
+/* Form Container */
+.kflow-form {
+  max-width: 800px;
+  margin: 0 auto;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+/* Form Header */
+.kflow-form-header {
+  padding: 24px 32px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.kflow-form-title {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.kflow-form-description {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+/* Form Body */
+.kflow-form-body {
+  padding: 32px;
+}
+
+.kflow-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Form Field */
+.kflow-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Field Width Classes */
+.kflow-field-full {
+  width: 100%;
+}
+
+.kflow-field-half {
+  width: 50%;
+}
+
+.kflow-field-third {
+  width: 33.333%;
+}
+
+.kflow-field-quarter {
+  width: 25%;
+}
+
+@media (max-width: 768px) {
+  .kflow-field-half,
+  .kflow-field-third,
+  .kflow-field-quarter {
+    width: 100%;
+  }
+}
+
+/* Label */
+.kflow-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 2px;
+}
+
+.kflow-required {
+  color: #ef4444;
+  margin-left: 4px;
+  font-weight: 600;
+}
+
+/* Field Description */
+.kflow-field-description {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Input Styles */
+.kflow-input,
+.kflow-textarea,
+.kflow-select,
+.kflow-file-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #111827;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.kflow-input:focus,
+.kflow-textarea:focus,
+.kflow-select:focus,
+.kflow-file-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.kflow-input:disabled,
+.kflow-textarea:disabled,
+.kflow-select:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Textarea */
+.kflow-textarea {
+  resize: vertical;
+  min-height: 100px;
+  font-family: inherit;
+}
+
+/* Select */
+.kflow-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 8px center;
+  background-repeat: no-repeat;
+  background-size: 20px;
+  padding-right: 36px;
+}
+
+.kflow-select-multiple {
+  min-height: 120px;
+  background-image: none;
+  padding-right: 12px;
+}
+
+/* Checkbox */
+.kflow-checkbox-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.kflow-checkbox {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.kflow-checkbox-label {
+  font-size: 14px;
+  color: #374151;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Radio */
+.kflow-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kflow-radio-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kflow-radio {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.kflow-radio-label {
+  font-size: 14px;
+  color: #374151;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* File Input */
+.kflow-file-input {
+  padding: 8px;
+  cursor: pointer;
+}
+
+.kflow-file-input::file-selector-button {
+  padding: 6px 12px;
+  margin-right: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  background-color: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.kflow-file-input::file-selector-button:hover {
+  background-color: #f3f4f6;
+}
+
+/* Error State */
+.kflow-input-error,
+.kflow-input-error:focus {
+  border-color: #ef4444;
+}
+
+.kflow-input-error:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.kflow-field-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: #ef4444;
+  line-height: 1.4;
+}
+
+.kflow-field-error::before {
+  content: "⚠";
+  font-size: 14px;
+}
+
+/* Form Footer */
+.kflow-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 32px;
+}
+
+/* Buttons */
+.kflow-btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  font-family: inherit;
+}
+
+.kflow-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.kflow-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.kflow-btn-primary {
+  color: #ffffff;
+  background-color: #3b82f6;
+}
+
+.kflow-btn-primary:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.kflow-btn-primary:active:not(:disabled) {
+  background-color: #1d4ed8;
+}
+
+.kflow-btn-secondary {
+  color: #374151;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+}
+
+.kflow-btn-secondary:hover:not(:disabled) {
+  background-color: #f9fafb;
+}
+
+.kflow-btn-secondary:active:not(:disabled) {
+  background-color: #f3f4f6;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .kflow-form-header,
+  .kflow-form-body {
+    padding: 20px;
+  }
+
+  .kflow-form-title {
+    font-size: 20px;
+  }
+
+  .kflow-form-footer {
+    flex-direction: column-reverse;
+  }
+
+  .kflow-btn {
+    width: 100%;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .kflow-form {
+    background: #1f2937;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .kflow-form-header {
+    background: #111827;
+    border-bottom-color: #374151;
+  }
+
+  .kflow-form-title {
+    color: #f9fafb;
+  }
+
+  .kflow-form-description,
+  .kflow-field-description {
+    color: #9ca3af;
+  }
+
+  .kflow-label,
+  .kflow-checkbox-label,
+  .kflow-radio-label {
+    color: #e5e7eb;
+  }
+
+  .kflow-input,
+  .kflow-textarea,
+  .kflow-select,
+  .kflow-file-input {
+    color: #f9fafb;
+    background-color: #374151;
+    border-color: #4b5563;
+  }
+
+  .kflow-input:disabled,
+  .kflow-textarea:disabled,
+  .kflow-select:disabled {
+    background-color: #1f2937;
+  }
+
+  .kflow-form-footer {
+    border-top-color: #374151;
+  }
+
+  .kflow-btn-secondary {
+    color: #e5e7eb;
+    background-color: #374151;
+    border-color: #4b5563;
+  }
+
+  .kflow-btn-secondary:hover:not(:disabled) {
+    background-color: #4b5563;
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .kflow-input,
+  .kflow-textarea,
+  .kflow-select,
+  .kflow-file-input,
+  .kflow-btn {
+    transition: none;
+  }
+}
+
+/* Focus Visible (keyboard navigation) */
+.kflow-input:focus-visible,
+.kflow-textarea:focus-visible,
+.kflow-select:focus-visible,
+.kflow-checkbox:focus-visible,
+.kflow-radio:focus-visible,
+.kflow-btn:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}

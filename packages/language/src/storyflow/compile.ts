@@ -1,4 +1,5 @@
 import type { IR, IRState } from '../ir/types.js';
+import { inferFormFromPrompt } from './formInference.js';
 
 // Enhanced StoryFlow to SimpleScript compiler with BPMN compliance
 export function storyToSimple(story: string): string {
@@ -327,15 +328,26 @@ export function storyToIr(story: string): IR {
     switch (step.kind) {
       case 'userTask': {
         const id = idFactory.next('UserTask', step.assignee ?? step.prompt);
+        
+        // Generate form from prompt if it contains variables
+        const form = inferFormFromPrompt(step.prompt, id);
+        
         const state: Extract<IRState, { kind: 'userTask' }> = {
           id,
           kind: 'userTask',
           prompt: step.prompt,
           next: continuation,
         };
+        
         if (step.assignee) {
           state.assignee = step.assignee;
         }
+        
+        // Attach form if it has fields
+        if (form.fields.length > 0) {
+          state.form = form;
+        }
+        
         states.push(state);
         return id;
       }
