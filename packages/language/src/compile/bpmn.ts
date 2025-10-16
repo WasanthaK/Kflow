@@ -1367,8 +1367,8 @@ function computeWaypointsWithPorts(
     if (total === 1) return 0;
     if (total === 2) {
       // For gateways with true/false branches - increased separation
-      // 30% provides clear distinction at the exit point
-      return index === 0 ? -maxWidth * 0.30 : maxWidth * 0.30;
+      // 45% provides clearer distinction at the exit point
+      return index === 0 ? -maxWidth * 0.45 : maxWidth * 0.45;
     }
     // For more than 2, distribute with wider spacing
     const spacing = maxWidth * 0.7 / (total + 1);
