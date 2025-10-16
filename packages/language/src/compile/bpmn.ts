@@ -1246,8 +1246,8 @@ function clamp(value: number, min: number, max: number): number {
  *       If vertical lines overlap, displace by ±20px in X
  */
 function resolveLineOverlaps(flowWaypoints: Map<string, Waypoint[]>): void {
-  const DISPLACEMENT = 20; // Displacement amount for overlapping lines
-  const OVERLAP_TOLERANCE = 5; // Consider lines overlapping if within this distance
+  const DISPLACEMENT = 25; // Increased displacement for clearer separation
+  const OVERLAP_TOLERANCE = 8; // Increased tolerance to catch near-overlaps
   
   type LineSegment = {
     flowId: string;
@@ -1366,13 +1366,13 @@ function computeWaypointsWithPorts(
   const getPortOffset = (index: number, total: number, maxWidth: number): number => {
     if (total === 1) return 0;
     if (total === 2) {
-      // For gateways with true/false branches - balanced separation
-      // 25% provides clear distinction while maintaining visual connection
-      return index === 0 ? -maxWidth * 0.25 : maxWidth * 0.25;
+      // For gateways with true/false branches - increased separation
+      // 30% provides clear distinction at the exit point
+      return index === 0 ? -maxWidth * 0.30 : maxWidth * 0.30;
     }
-    // For more than 2, distribute evenly across available width
-    const spacing = maxWidth * 0.65 / (total + 1);
-    return (index + 1) * spacing - maxWidth * 0.325;
+    // For more than 2, distribute with wider spacing
+    const spacing = maxWidth * 0.7 / (total + 1);
+    return (index + 1) * spacing - maxWidth * 0.35;
   };
   
   // Choose connection points based on relative positions and port offsets
@@ -1410,10 +1410,10 @@ function computeWaypointsWithPorts(
   waypoints.push(sourcePoint);
   
   // Add initial vertical segment to separate multiple outgoing flows
-  // Keep this minimal - just enough to clear the element
+  // Increased separation for clearer gateway branching
   if (totalFlowsFromSource > 1) {
-    const baseSeparation = 20; // Reduced for tighter connection appearance
-    const staggerAmount = 8;
+    const baseSeparation = 30; // Increased for better gateway branch visibility
+    const staggerAmount = 12; // Increased stagger for more distinct paths
     const separationDistance = baseSeparation + (flowIndex * staggerAmount);
     
     const separationY = isBackward ? 
