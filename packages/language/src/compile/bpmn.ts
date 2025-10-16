@@ -1357,9 +1357,11 @@ function computeWaypointsWithPorts(
   const waypoints: Waypoint[] = [];
   
   // Determine flow direction
+  const deltaX = targetCenter.x - sourceCenter.x;
+  const deltaY = targetCenter.y - sourceCenter.y;
   const isBackward = target.y < source.y + source.height / 2;
-  const horizontalOffset = Math.abs(sourceCenter.x - targetCenter.x);
-  const verticalOffset = Math.abs(sourceCenter.y - targetCenter.y);
+  const horizontalOffset = Math.abs(deltaX);
+  const verticalOffset = Math.abs(deltaY);
   
   // Calculate port offset for multiple connections
   // This prevents overlapping at connection points
@@ -1376,7 +1378,7 @@ function computeWaypointsWithPorts(
   };
   
   // Determine if this should be a horizontal or vertical flow based on layout
-  const isHorizontalFlow = horizontalOffset > verticalOffset * 1.5;
+  const isHorizontalFlow = horizontalOffset >= verticalOffset || horizontalOffset > 80;
   
   // Minimum extension before bending
   const MIN_VERTICAL_EXTENSION = 50;
@@ -1489,6 +1491,23 @@ function computeWaypointsWithPorts(
     }
   }
   
+  // Provide gentle separation when multiple flows enter the same target
+  if (totalFlowsToTarget > 1) {
+    const baseApproach = 20;
+    const approachStagger = 6;
+    const approachDistance = baseApproach + (targetFlowIndex * approachStagger);
+
+    if (targetEntryDirection === 'top') {
+      waypoints.push({ x: targetPoint.x, y: targetPoint.y - approachDistance });
+    } else if (targetEntryDirection === 'bottom') {
+      waypoints.push({ x: targetPoint.x, y: targetPoint.y + approachDistance });
+    } else if (targetEntryDirection === 'left') {
+      waypoints.push({ x: targetPoint.x - approachDistance, y: targetPoint.y });
+    } else if (targetEntryDirection === 'right') {
+      waypoints.push({ x: targetPoint.x + approachDistance, y: targetPoint.y });
+    }
+  }
+
   waypoints.push(targetPoint);
   
   // Remove consecutive duplicates while preserving routing geometry
