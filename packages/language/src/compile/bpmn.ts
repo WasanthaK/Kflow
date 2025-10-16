@@ -1381,8 +1381,8 @@ function computeWaypointsWithPorts(
   const VERTICAL_PRIORITY_BUFFER = 30;
   const isHorizontalFlow = horizontalOffset > verticalOffset + VERTICAL_PRIORITY_BUFFER;
 
-  // Minimum extension before bending
-  const MIN_EXTENSION = 50;
+  // Minimum extension before bending - reduced for clearer visual connection
+  const MIN_EXTENSION = 35;
 
   const movePoint = (point: Waypoint, direction: 'top' | 'bottom' | 'left' | 'right', distance: number): Waypoint => {
     switch (direction) {
@@ -1443,8 +1443,8 @@ function computeWaypointsWithPorts(
   
   waypoints.push(sourcePoint);
 
-  const baseSeparation = totalFlowsFromSource > 1 ? 20 : 0;
-  const staggerAmount = totalFlowsFromSource > 1 ? 12 : 0;
+  const baseSeparation = totalFlowsFromSource > 1 ? 15 : 0;
+  const staggerAmount = totalFlowsFromSource > 1 ? 10 : 0;
   const separationDistance = baseSeparation + (flowIndex * staggerAmount);
   const extensionDistance = MIN_EXTENSION + separationDistance;
 
@@ -1458,15 +1458,15 @@ function computeWaypointsWithPorts(
     }
 
     const availableVertical = Math.abs(extendedSource.y - targetPoint.y);
-    let approachDistance = Math.min(MIN_EXTENSION, availableVertical / 2);
+    let approachDistance = Math.min(30, availableVertical * 0.4);
 
     if (totalFlowsToTarget > 1) {
-      const baseApproach = 20;
-      const approachStagger = 6;
+      const baseApproach = 15;
+      const approachStagger = 5;
       approachDistance = Math.max(approachDistance, baseApproach + (targetFlowIndex * approachStagger));
     }
 
-    if (approachDistance > 1) {
+    if (approachDistance > 5) {
       if (targetEntryDirection === 'top') {
         waypoints.push({ x: targetPoint.x, y: targetPoint.y - approachDistance });
       } else {
@@ -1479,15 +1479,15 @@ function computeWaypointsWithPorts(
     }
 
     const availableHorizontal = Math.abs(extendedSource.x - targetPoint.x);
-    let approachDistance = Math.min(MIN_EXTENSION, availableHorizontal / 2);
+    let approachDistance = Math.min(30, availableHorizontal * 0.4);
 
     if (totalFlowsToTarget > 1) {
-      const baseApproach = 20;
-      const approachStagger = 6;
+      const baseApproach = 15;
+      const approachStagger = 5;
       approachDistance = Math.max(approachDistance, baseApproach + (targetFlowIndex * approachStagger));
     }
 
-    if (approachDistance > 1) {
+    if (approachDistance > 5) {
       if (targetEntryDirection === 'left') {
         waypoints.push({ x: targetPoint.x - approachDistance, y: targetPoint.y });
       } else {
