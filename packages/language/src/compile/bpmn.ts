@@ -1378,11 +1378,25 @@ function computeWaypointsWithPorts(
   };
   
   // Determine if this should be a horizontal or vertical flow based on layout
-  const isHorizontalFlow = horizontalOffset >= verticalOffset || horizontalOffset > 80;
-  
+  const VERTICAL_PRIORITY_BUFFER = 30;
+  const isHorizontalFlow = horizontalOffset > verticalOffset + VERTICAL_PRIORITY_BUFFER;
+
   // Minimum extension before bending
-  const MIN_VERTICAL_EXTENSION = 50;
-  const MIN_HORIZONTAL_EXTENSION = 50;
+  const MIN_EXTENSION = 50;
+
+  const movePoint = (point: Waypoint, direction: 'top' | 'bottom' | 'left' | 'right', distance: number): Waypoint => {
+    switch (direction) {
+      case 'top':
+        return { x: point.x, y: point.y - distance };
+      case 'bottom':
+        return { x: point.x, y: point.y + distance };
+      case 'left':
+        return { x: point.x - distance, y: point.y };
+      case 'right':
+      default:
+        return { x: point.x + distance, y: point.y };
+    }
+  };
   
   // Choose connection points based on flow direction
   let sourcePoint: Waypoint;
@@ -1428,43 +1442,31 @@ function computeWaypointsWithPorts(
   }
   
   waypoints.push(sourcePoint);
-  
-  // Add minimum extension in exit direction before bending
-  const baseSeparation = totalFlowsFromSource > 1 ? 30 : 0;
+
+  const baseSeparation = totalFlowsFromSource > 1 ? 20 : 0;
   const staggerAmount = totalFlowsFromSource > 1 ? 12 : 0;
-  const additionalSeparation = baseSeparation + (flowIndex * staggerAmount);
-  
-  if (sourceExitDirection === 'top') {
-    const extension = Math.max(MIN_VERTICAL_EXTENSION, additionalSeparation);
-    waypoints.push({ x: sourcePoint.x, y: sourcePoint.y - extension });
-  } else if (sourceExitDirection === 'bottom') {
-    const extension = Math.max(MIN_VERTICAL_EXTENSION, additionalSeparation);
-    waypoints.push({ x: sourcePoint.x, y: sourcePoint.y + extension });
-  } else if (sourceExitDirection === 'left') {
-    const extension = Math.max(MIN_HORIZONTAL_EXTENSION, additionalSeparation);
-    waypoints.push({ x: sourcePoint.x - extension, y: sourcePoint.y });
-  } else if (sourceExitDirection === 'right') {
-    const extension = Math.max(MIN_HORIZONTAL_EXTENSION, additionalSeparation);
-    waypoints.push({ x: sourcePoint.x + extension, y: sourcePoint.y });
-  }
-  
-  // Now route from the extended point to the target
-  // The last waypoint is already extended in the exit direction
-  const lastWaypoint = waypoints[waypoints.length - 1];
-  
-  // Simple orthogonal routing: go to target X, then target Y
+  const separationDistance = baseSeparation + (flowIndex * staggerAmount);
+  const extensionDistance = MIN_EXTENSION + separationDistance;
+
+  const extendedSource = movePoint(sourcePoint, sourceExitDirection, extensionDistance);
+  waypoints.push(extendedSource);
+
+  // Route with a simple orthogonal path after the required straight segment
   if (sourceExitDirection === 'top' || sourceExitDirection === 'bottom') {
-    // Exited vertically, now need to route horizontally if needed
-    if (Math.abs(lastWaypoint.x - targetPoint.x) > 10) {
-      // Need horizontal movement
-      const midY = (lastWaypoint.y + targetPoint.y) / 2;
-      waypoints.push({ x: lastWaypoint.x, y: midY });
-      waypoints.push({ x: targetPoint.x, y: midY });
+    if (Math.abs(extendedSource.x - targetPoint.x) > 1) {
+      waypoints.push({ x: targetPoint.x, y: extendedSource.y });
     }
-    
-    // Add final approach to target if needed
-    if (targetEntryDirection === 'top' || targetEntryDirection === 'bottom') {
-      const approachDistance = Math.min(MIN_VERTICAL_EXTENSION, Math.abs(lastWaypoint.y - targetPoint.y) / 2);
+
+    const availableVertical = Math.abs(extendedSource.y - targetPoint.y);
+    let approachDistance = Math.min(MIN_EXTENSION, availableVertical / 2);
+
+    if (totalFlowsToTarget > 1) {
+      const baseApproach = 20;
+      const approachStagger = 6;
+      approachDistance = Math.max(approachDistance, baseApproach + (targetFlowIndex * approachStagger));
+    }
+
+    if (approachDistance > 1) {
       if (targetEntryDirection === 'top') {
         waypoints.push({ x: targetPoint.x, y: targetPoint.y - approachDistance });
       } else {
@@ -1472,39 +1474,25 @@ function computeWaypointsWithPorts(
       }
     }
   } else {
-    // Exited horizontally, now need to route vertically if needed
-    if (Math.abs(lastWaypoint.y - targetPoint.y) > 10) {
-      // Need vertical movement
-      const midX = (lastWaypoint.x + targetPoint.x) / 2;
-      waypoints.push({ x: midX, y: lastWaypoint.y });
-      waypoints.push({ x: midX, y: targetPoint.y });
+    if (Math.abs(extendedSource.y - targetPoint.y) > 1) {
+      waypoints.push({ x: extendedSource.x, y: targetPoint.y });
     }
-    
-    // Add final approach to target if needed
-    if (targetEntryDirection === 'left' || targetEntryDirection === 'right') {
-      const approachDistance = Math.min(MIN_HORIZONTAL_EXTENSION, Math.abs(lastWaypoint.x - targetPoint.x) / 2);
+
+    const availableHorizontal = Math.abs(extendedSource.x - targetPoint.x);
+    let approachDistance = Math.min(MIN_EXTENSION, availableHorizontal / 2);
+
+    if (totalFlowsToTarget > 1) {
+      const baseApproach = 20;
+      const approachStagger = 6;
+      approachDistance = Math.max(approachDistance, baseApproach + (targetFlowIndex * approachStagger));
+    }
+
+    if (approachDistance > 1) {
       if (targetEntryDirection === 'left') {
         waypoints.push({ x: targetPoint.x - approachDistance, y: targetPoint.y });
       } else {
         waypoints.push({ x: targetPoint.x + approachDistance, y: targetPoint.y });
       }
-    }
-  }
-  
-  // Provide gentle separation when multiple flows enter the same target
-  if (totalFlowsToTarget > 1) {
-    const baseApproach = 20;
-    const approachStagger = 6;
-    const approachDistance = baseApproach + (targetFlowIndex * approachStagger);
-
-    if (targetEntryDirection === 'top') {
-      waypoints.push({ x: targetPoint.x, y: targetPoint.y - approachDistance });
-    } else if (targetEntryDirection === 'bottom') {
-      waypoints.push({ x: targetPoint.x, y: targetPoint.y + approachDistance });
-    } else if (targetEntryDirection === 'left') {
-      waypoints.push({ x: targetPoint.x - approachDistance, y: targetPoint.y });
-    } else if (targetEntryDirection === 'right') {
-      waypoints.push({ x: targetPoint.x + approachDistance, y: targetPoint.y });
     }
   }
 
