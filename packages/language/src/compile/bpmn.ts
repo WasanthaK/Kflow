@@ -1375,118 +1375,118 @@ function computeWaypointsWithPorts(
     return (index + 1) * spacing - maxWidth * 0.35;
   };
   
-  // Choose connection points based on relative positions and port offsets
+  // Determine if this should be a horizontal or vertical flow based on layout
+  const isHorizontalFlow = horizontalOffset > verticalOffset * 1.5;
+  
+  // Minimum extension before bending
+  const MIN_VERTICAL_EXTENSION = 50;
+  const MIN_HORIZONTAL_EXTENSION = 50;
+  
+  // Choose connection points based on flow direction
   let sourcePoint: Waypoint;
   let targetPoint: Waypoint;
+  let sourceExitDirection: 'top' | 'bottom' | 'left' | 'right';
+  let targetEntryDirection: 'top' | 'bottom' | 'left' | 'right';
   
-  if (isBackward) {
-    // Backward flow: exit from top
-    const sourcePortOffset = getPortOffset(flowIndex, totalFlowsFromSource, source.width * 0.8);
-    sourcePoint = { 
-      x: sourceCenter.x + sourcePortOffset, 
-      y: source.y 
-    };
+  if (isHorizontalFlow) {
+    // Horizontal flow: use left/right exits
+    const isGoingRight = targetCenter.x > sourceCenter.x;
+    const sourcePortOffset = getPortOffset(flowIndex, totalFlowsFromSource, source.height * 0.8);
+    const targetPortOffset = getPortOffset(targetFlowIndex, totalFlowsToTarget, target.height * 0.8);
     
-    const targetPortOffset = getPortOffset(targetFlowIndex, totalFlowsToTarget, target.width * 0.8);
-    targetPoint = { 
-      x: targetCenter.x + targetPortOffset, 
-      y: target.y + target.height 
-    };
+    if (isGoingRight) {
+      sourcePoint = { x: source.x + source.width, y: sourceCenter.y + sourcePortOffset };
+      targetPoint = { x: target.x, y: targetCenter.y + targetPortOffset };
+      sourceExitDirection = 'right';
+      targetEntryDirection = 'left';
+    } else {
+      sourcePoint = { x: source.x, y: sourceCenter.y + sourcePortOffset };
+      targetPoint = { x: target.x + target.width, y: targetCenter.y + targetPortOffset };
+      sourceExitDirection = 'left';
+      targetEntryDirection = 'right';
+    }
   } else {
-    // Forward flow: exit from bottom
+    // Vertical flow: use top/bottom exits
     const sourcePortOffset = getPortOffset(flowIndex, totalFlowsFromSource, source.width * 0.8);
-    sourcePoint = { 
-      x: sourceCenter.x + sourcePortOffset, 
-      y: source.y + source.height 
-    };
-    
     const targetPortOffset = getPortOffset(targetFlowIndex, totalFlowsToTarget, target.width * 0.8);
-    targetPoint = { 
-      x: targetCenter.x + targetPortOffset, 
-      y: target.y 
-    };
+    
+    if (isBackward) {
+      // Exit from top
+      sourcePoint = { x: sourceCenter.x + sourcePortOffset, y: source.y };
+      targetPoint = { x: targetCenter.x + targetPortOffset, y: target.y + target.height };
+      sourceExitDirection = 'top';
+      targetEntryDirection = 'bottom';
+    } else {
+      // Exit from bottom
+      sourcePoint = { x: sourceCenter.x + sourcePortOffset, y: source.y + source.height };
+      targetPoint = { x: targetCenter.x + targetPortOffset, y: target.y };
+      sourceExitDirection = 'bottom';
+      targetEntryDirection = 'top';
+    }
   }
   
   waypoints.push(sourcePoint);
   
-  // Add initial vertical segment to separate multiple outgoing flows
-  // Increased separation for clearer gateway branching
-  if (totalFlowsFromSource > 1) {
-    const baseSeparation = 30; // Increased for better gateway branch visibility
-    const staggerAmount = 12; // Increased stagger for more distinct paths
-    const separationDistance = baseSeparation + (flowIndex * staggerAmount);
-    
-    const separationY = isBackward ? 
-      sourcePoint.y - separationDistance : 
-      sourcePoint.y + separationDistance;
-    
-    waypoints.push({ x: sourcePoint.x, y: separationY });
+  // Add minimum extension in exit direction before bending
+  const baseSeparation = totalFlowsFromSource > 1 ? 30 : 0;
+  const staggerAmount = totalFlowsFromSource > 1 ? 12 : 0;
+  const additionalSeparation = baseSeparation + (flowIndex * staggerAmount);
+  
+  if (sourceExitDirection === 'top') {
+    const extension = Math.max(MIN_VERTICAL_EXTENSION, additionalSeparation);
+    waypoints.push({ x: sourcePoint.x, y: sourcePoint.y - extension });
+  } else if (sourceExitDirection === 'bottom') {
+    const extension = Math.max(MIN_VERTICAL_EXTENSION, additionalSeparation);
+    waypoints.push({ x: sourcePoint.x, y: sourcePoint.y + extension });
+  } else if (sourceExitDirection === 'left') {
+    const extension = Math.max(MIN_HORIZONTAL_EXTENSION, additionalSeparation);
+    waypoints.push({ x: sourcePoint.x - extension, y: sourcePoint.y });
+  } else if (sourceExitDirection === 'right') {
+    const extension = Math.max(MIN_HORIZONTAL_EXTENSION, additionalSeparation);
+    waypoints.push({ x: sourcePoint.x + extension, y: sourcePoint.y });
   }
   
-  // Create routing based on layout characteristics
-  if (horizontalOffset < 10) {
-    // Nearly vertical alignment: direct connection with minimal waypoints
-    if (verticalOffset > 40) {
-      const midY = (sourcePoint.y + targetPoint.y) / 2;
-      waypoints.push({ x: sourcePoint.x, y: midY });
-    }
-  } else if (horizontalOffset > 100) {
-    // Significant horizontal offset: use L-shaped routing with separation
-    const gapY = Math.abs(targetPoint.y - sourcePoint.y);
-    
-    if (gapY > 80) {
-      // Clean L-shaped route with stagger to prevent horizontal overlaps
-      const baseY = sourcePoint.y + (targetPoint.y - sourcePoint.y) * 0.6;
-      const stagger = flowIndex * 15; // Stagger horizontal routes
-      const midY = baseY + stagger;
-      
-      waypoints.push({ x: sourcePoint.x, y: midY });
-      
-      // Add intermediate point if there's significant horizontal movement
-      if (horizontalOffset > 200) {
-        const midX = sourcePoint.x + (targetPoint.x - sourcePoint.x) * 0.5;
-        waypoints.push({ x: midX, y: midY });
-        const nextY = midY + (targetPoint.y - midY) * 0.5;
-        waypoints.push({ x: midX, y: nextY });
-        waypoints.push({ x: targetPoint.x, y: nextY });
-      } else {
-        waypoints.push({ x: targetPoint.x, y: midY });
-      }
-    } else {
-      // Limited vertical space: create stepped route
-      const stepOut = isBackward ? -40 : 40;
-      waypoints.push({ x: sourcePoint.x, y: sourcePoint.y + stepOut });
-      
-      const midY = (sourcePoint.y + stepOut + targetPoint.y) / 2;
-      waypoints.push({ x: sourcePoint.x, y: midY });
+  // Now route from the extended point to the target
+  // The last waypoint is already extended in the exit direction
+  const lastWaypoint = waypoints[waypoints.length - 1];
+  
+  // Simple orthogonal routing: go to target X, then target Y
+  if (sourceExitDirection === 'top' || sourceExitDirection === 'bottom') {
+    // Exited vertically, now need to route horizontally if needed
+    if (Math.abs(lastWaypoint.x - targetPoint.x) > 10) {
+      // Need horizontal movement
+      const midY = (lastWaypoint.y + targetPoint.y) / 2;
+      waypoints.push({ x: lastWaypoint.x, y: midY });
       waypoints.push({ x: targetPoint.x, y: midY });
-      
-      if (!isBackward) {
-        waypoints.push({ x: targetPoint.x, y: targetPoint.y - 20 });
+    }
+    
+    // Add final approach to target if needed
+    if (targetEntryDirection === 'top' || targetEntryDirection === 'bottom') {
+      const approachDistance = Math.min(MIN_VERTICAL_EXTENSION, Math.abs(lastWaypoint.y - targetPoint.y) / 2);
+      if (targetEntryDirection === 'top') {
+        waypoints.push({ x: targetPoint.x, y: targetPoint.y - approachDistance });
+      } else {
+        waypoints.push({ x: targetPoint.x, y: targetPoint.y + approachDistance });
       }
     }
   } else {
-    // Moderate horizontal offset: L-route with staggering to prevent overlap
-    // CRITICAL: Each flow MUST have a unique routing Y to prevent horizontal overlaps
-    const staggerMultiplier = 20; // Sufficient spacing to avoid overlaps
-    const routingY = isBackward ? 
-      Math.min(sourcePoint.y, targetPoint.y) - 30 - (flowIndex * staggerMultiplier) : 
-      sourcePoint.y + (targetPoint.y - sourcePoint.y) / 2 + (flowIndex * staggerMultiplier);
+    // Exited horizontally, now need to route vertically if needed
+    if (Math.abs(lastWaypoint.y - targetPoint.y) > 10) {
+      // Need vertical movement
+      const midX = (lastWaypoint.x + targetPoint.x) / 2;
+      waypoints.push({ x: midX, y: lastWaypoint.y });
+      waypoints.push({ x: midX, y: targetPoint.y });
+    }
     
-    waypoints.push({ x: sourcePoint.x, y: routingY });
-    waypoints.push({ x: targetPoint.x, y: routingY });
-  }
-  
-  // Add final approach segment for multiple incoming flows
-  // This ensures connectors don't overlap when entering the same target
-  if (totalFlowsToTarget > 1) {
-    const baseApproach = 20;
-    const approachStagger = 6;
-    const approachDistance = baseApproach + (targetFlowIndex * approachStagger);
-    const approachY = isBackward ?
-      targetPoint.y + approachDistance :
-      targetPoint.y - approachDistance;
-    waypoints.push({ x: targetPoint.x, y: approachY });
+    // Add final approach to target if needed
+    if (targetEntryDirection === 'left' || targetEntryDirection === 'right') {
+      const approachDistance = Math.min(MIN_HORIZONTAL_EXTENSION, Math.abs(lastWaypoint.x - targetPoint.x) / 2);
+      if (targetEntryDirection === 'left') {
+        waypoints.push({ x: targetPoint.x - approachDistance, y: targetPoint.y });
+      } else {
+        waypoints.push({ x: targetPoint.x + approachDistance, y: targetPoint.y });
+      }
+    }
   }
   
   waypoints.push(targetPoint);
