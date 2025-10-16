@@ -955,32 +955,43 @@ export function irToBpmnXml(ir: IR): string {
     incomingFlowsByTarget.get(flow.targetRef)!.push(flow);
   });
 
+  // Generate initial waypoints for all flows
+  const flowWaypoints = new Map<string, Waypoint[]>();
+  flows.forEach(flow => {
+    const sourceBounds = elementBounds.get(flow.sourceRef);
+    const targetBounds = elementBounds.get(flow.targetRef);
+    if (!sourceBounds || !targetBounds) return;
+    
+    const sourceFlows = outgoingFlowsBySource.get(flow.sourceRef) || [];
+    const flowIndex = sourceFlows.indexOf(flow);
+    const totalSourceFlows = sourceFlows.length;
+    
+    const targetFlows = incomingFlowsByTarget.get(flow.targetRef) || [];
+    const targetFlowIndex = targetFlows.indexOf(flow);
+    const totalTargetFlows = targetFlows.length;
+    
+    const points = computeWaypointsWithPorts(
+      sourceBounds, 
+      targetBounds, 
+      flowIndex, 
+      totalSourceFlows,
+      targetFlowIndex,
+      totalTargetFlows,
+      flow.conditionExpression
+    );
+    
+    flowWaypoints.set(flow.id, points);
+  });
+
+  // Post-process: Detect and fix overlapping line segments
+  resolveLineOverlaps(flowWaypoints);
+
   const edgeXml = flows
     .map(flow => {
-      const sourceBounds = elementBounds.get(flow.sourceRef);
-      const targetBounds = elementBounds.get(flow.targetRef);
-      if (!sourceBounds || !targetBounds) {
+      const points = flowWaypoints.get(flow.id);
+      if (!points || points.length === 0) {
         return '';
       }
-      
-      // Determine port offset for multiple connections from same source
-      const sourceFlows = outgoingFlowsBySource.get(flow.sourceRef) || [];
-      const flowIndex = sourceFlows.indexOf(flow);
-      const totalSourceFlows = sourceFlows.length;
-      
-      const targetFlows = incomingFlowsByTarget.get(flow.targetRef) || [];
-      const targetFlowIndex = targetFlows.indexOf(flow);
-      const totalTargetFlows = targetFlows.length;
-      
-      const points = computeWaypointsWithPorts(
-        sourceBounds, 
-        targetBounds, 
-        flowIndex, 
-        totalSourceFlows,
-        targetFlowIndex,
-        totalTargetFlows,
-        flow.conditionExpression // For gateway branches
-      );
       
       const waypointXml = points
         .map(point => `        <di:waypoint x="${roundCoord(point.x)}" y="${roundCoord(point.y)}" />`)
@@ -1227,6 +1238,106 @@ function dock(bounds: Bounds, reference: Bounds): { point: Waypoint; direction: 
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+/**
+ * Detect and resolve overlapping line segments by displacing them
+ * Rule: If horizontal lines overlap, displace by ±20px in Y
+ *       If vertical lines overlap, displace by ±20px in X
+ */
+function resolveLineOverlaps(flowWaypoints: Map<string, Waypoint[]>): void {
+  const DISPLACEMENT = 20; // Displacement amount for overlapping lines
+  const OVERLAP_TOLERANCE = 5; // Consider lines overlapping if within this distance
+  
+  type LineSegment = {
+    flowId: string;
+    segmentIndex: number;
+    start: Waypoint;
+    end: Waypoint;
+    isHorizontal: boolean;
+    isVertical: boolean;
+  };
+  
+  // Extract all line segments from all flows
+  const segments: LineSegment[] = [];
+  for (const [flowId, waypoints] of flowWaypoints.entries()) {
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      const start = waypoints[i];
+      const end = waypoints[i + 1];
+      const isHorizontal = Math.abs(start.y - end.y) < OVERLAP_TOLERANCE;
+      const isVertical = Math.abs(start.x - end.x) < OVERLAP_TOLERANCE;
+      
+      segments.push({
+        flowId,
+        segmentIndex: i,
+        start,
+        end,
+        isHorizontal,
+        isVertical
+      });
+    }
+  }
+  
+  // Check each segment against all other segments for overlaps
+  for (let i = 0; i < segments.length; i++) {
+    const seg1 = segments[i];
+    
+    for (let j = i + 1; j < segments.length; j++) {
+      const seg2 = segments[j];
+      
+      // Check horizontal line overlap
+      if (seg1.isHorizontal && seg2.isHorizontal) {
+        const y1 = seg1.start.y;
+        const y2 = seg2.start.y;
+        
+        // If Y coordinates are very close (overlapping)
+        if (Math.abs(y1 - y2) < OVERLAP_TOLERANCE) {
+          // Check if X ranges overlap
+          const x1Min = Math.min(seg1.start.x, seg1.end.x);
+          const x1Max = Math.max(seg1.start.x, seg1.end.x);
+          const x2Min = Math.min(seg2.start.x, seg2.end.x);
+          const x2Max = Math.max(seg2.start.x, seg2.end.x);
+          
+          if (x1Min < x2Max && x2Min < x1Max) {
+            // Lines overlap! Displace the second one
+            const waypoints2 = flowWaypoints.get(seg2.flowId)!;
+            waypoints2[seg2.segmentIndex].y += DISPLACEMENT;
+            waypoints2[seg2.segmentIndex + 1].y += DISPLACEMENT;
+            
+            // Update the segment reference
+            seg2.start.y += DISPLACEMENT;
+            seg2.end.y += DISPLACEMENT;
+          }
+        }
+      }
+      
+      // Check vertical line overlap
+      if (seg1.isVertical && seg2.isVertical) {
+        const x1 = seg1.start.x;
+        const x2 = seg2.start.x;
+        
+        // If X coordinates are very close (overlapping)
+        if (Math.abs(x1 - x2) < OVERLAP_TOLERANCE) {
+          // Check if Y ranges overlap
+          const y1Min = Math.min(seg1.start.y, seg1.end.y);
+          const y1Max = Math.max(seg1.start.y, seg1.end.y);
+          const y2Min = Math.min(seg2.start.y, seg2.end.y);
+          const y2Max = Math.max(seg2.start.y, seg2.end.y);
+          
+          if (y1Min < y2Max && y2Min < y1Max) {
+            // Lines overlap! Displace the second one
+            const waypoints2 = flowWaypoints.get(seg2.flowId)!;
+            waypoints2[seg2.segmentIndex].x += DISPLACEMENT;
+            waypoints2[seg2.segmentIndex + 1].x += DISPLACEMENT;
+            
+            // Update the segment reference
+            seg2.start.x += DISPLACEMENT;
+            seg2.end.x += DISPLACEMENT;
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
