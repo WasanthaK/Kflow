@@ -726,7 +726,7 @@ export function irToBpmnXml(ir: IR): string {
 
   const LANE_WIDTH = 320;
   const LANE_PADDING_TOP = 80;
-  const NODE_VERTICAL_GAP = 180; // Increased for better element separation
+  const NODE_VERTICAL_GAP = 160; // Balanced spacing - not too tight, not too loose
   const NODE_HORIZONTAL_GAP = 100; // Adequate horizontal spacing
 
   const TASK_DIMENSIONS = { width: 180, height: 90 } as const;
@@ -1255,13 +1255,13 @@ function computeWaypointsWithPorts(
   const getPortOffset = (index: number, total: number, maxWidth: number): number => {
     if (total === 1) return 0;
     if (total === 2) {
-      // For gateways with true/false branches, create MORE distinct separation
-      // Use wider offset (40% instead of 25%) for clearer visual distinction
-      return index === 0 ? -maxWidth * 0.4 : maxWidth * 0.4;
+      // For gateways with true/false branches - balanced separation
+      // 25% provides clear distinction while maintaining visual connection
+      return index === 0 ? -maxWidth * 0.25 : maxWidth * 0.25;
     }
-    // For more than 2, distribute with wider spacing
-    const spacing = maxWidth * 0.8 / (total + 1);
-    return (index + 1) * spacing - maxWidth * 0.4;
+    // For more than 2, distribute evenly across available width
+    const spacing = maxWidth * 0.65 / (total + 1);
+    return (index + 1) * spacing - maxWidth * 0.325;
   };
   
   // Choose connection points based on relative positions and port offsets
@@ -1299,11 +1299,10 @@ function computeWaypointsWithPorts(
   waypoints.push(sourcePoint);
   
   // Add initial vertical segment to separate multiple outgoing flows
-  // CRITICAL: This is where branches diverge - make it more aggressive
+  // Keep this minimal - just enough to clear the element
   if (totalFlowsFromSource > 1) {
-    // Increase base separation and stagger more aggressively
-    const baseSeparation = 35; // Increased from 25
-    const staggerAmount = 12; // Increased from 8
+    const baseSeparation = 20; // Reduced for tighter connection appearance
+    const staggerAmount = 8;
     const separationDistance = baseSeparation + (flowIndex * staggerAmount);
     
     const separationY = isBackward ? 
@@ -1311,12 +1310,6 @@ function computeWaypointsWithPorts(
       sourcePoint.y + separationDistance;
     
     waypoints.push({ x: sourcePoint.x, y: separationY });
-    
-    // For 2 branches (typical gateway), add horizontal offset early
-    if (totalFlowsFromSource === 2) {
-      const horizontalOffset = flowIndex === 0 ? -15 : 15; // Move left or right
-      waypoints.push({ x: sourcePoint.x + horizontalOffset, y: separationY });
-    }
   }
   
   // Create routing based on layout characteristics
@@ -1331,11 +1324,10 @@ function computeWaypointsWithPorts(
     const gapY = Math.abs(targetPoint.y - sourcePoint.y);
     
     if (gapY > 80) {
-      // Clean L-shaped route
-      const midY = sourcePoint.y + (targetPoint.y - sourcePoint.y) * 0.6;
-      
-      // Add horizontal offset for multiple flows to prevent overlapping
-      const horizontalSeparation = totalFlowsFromSource > 1 ? flowIndex * 15 : 0;
+      // Clean L-shaped route with stagger to prevent horizontal overlaps
+      const baseY = sourcePoint.y + (targetPoint.y - sourcePoint.y) * 0.6;
+      const stagger = flowIndex * 15; // Stagger horizontal routes
+      const midY = baseY + stagger;
       
       waypoints.push({ x: sourcePoint.x, y: midY });
       
@@ -1343,8 +1335,9 @@ function computeWaypointsWithPorts(
       if (horizontalOffset > 200) {
         const midX = sourcePoint.x + (targetPoint.x - sourcePoint.x) * 0.5;
         waypoints.push({ x: midX, y: midY });
-        waypoints.push({ x: midX, y: midY + (targetPoint.y - midY) * 0.5 });
-        waypoints.push({ x: targetPoint.x, y: midY + (targetPoint.y - midY) * 0.5 });
+        const nextY = midY + (targetPoint.y - midY) * 0.5;
+        waypoints.push({ x: midX, y: nextY });
+        waypoints.push({ x: targetPoint.x, y: nextY });
       } else {
         waypoints.push({ x: targetPoint.x, y: midY });
       }
@@ -1362,9 +1355,9 @@ function computeWaypointsWithPorts(
       }
     }
   } else {
-    // Moderate horizontal offset: L-route with ENHANCED port awareness
-    // Increase stagger amount for clearer visual separation
-    const staggerMultiplier = 15; // Increased from 10
+    // Moderate horizontal offset: L-route with staggering to prevent overlap
+    // CRITICAL: Each flow MUST have a unique routing Y to prevent horizontal overlaps
+    const staggerMultiplier = 20; // Sufficient spacing to avoid overlaps
     const routingY = isBackward ? 
       Math.min(sourcePoint.y, targetPoint.y) - 30 - (flowIndex * staggerMultiplier) : 
       sourcePoint.y + (targetPoint.y - sourcePoint.y) / 2 + (flowIndex * staggerMultiplier);
@@ -1376,8 +1369,8 @@ function computeWaypointsWithPorts(
   // Add final approach segment for multiple incoming flows
   // This ensures connectors don't overlap when entering the same target
   if (totalFlowsToTarget > 1) {
-    const baseApproach = 25; // Increased from 20
-    const approachStagger = 8; // Increased from 5
+    const baseApproach = 20;
+    const approachStagger = 6;
     const approachDistance = baseApproach + (targetFlowIndex * approachStagger);
     const approachY = isBackward ?
       targetPoint.y + approachDistance :
