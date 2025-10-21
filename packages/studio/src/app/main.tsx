@@ -17,6 +17,8 @@ import type { IR } from '../../../language/src/ir/types.js';
 import { storyToIr, storyToSimple } from '../../../language/src/storyflow/compile.js';
 import { irToBpmnXml } from '../../../language/src/compile/bpmn.js';
 import { validateBpmnXml } from './bpmnValidation';
+import { DualTabPanel } from '../components/DualTabPanel';
+import type { FormDefinition } from '../../../language/src/ir/types.js';
 
 const CUSTOM_SAMPLE_ID = 'custom';
 const FLOW_HEADER_REGEX = /^\s*flow\s*:/i;
@@ -338,6 +340,8 @@ export function App() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [graphFullscreen, setGraphFullscreen] = useState(false);
   const [showClarifications, setShowClarifications] = useState(true);
+  const [primaryTab, setPrimaryTab] = useState<'bpmn' | 'ir' | 'forms' | 'clarifications' | 'artifacts'>('bpmn');
+  const [secondaryTab, setSecondaryTab] = useState<'bpmn' | 'ir' | 'forms' | 'clarifications' | 'artifacts' | null>('ir');
   const [clarifications, setClarifications] = useState<ClarificationSummary>(EMPTY_CLARIFICATIONS);
   const [lastConversionMeta, setLastConversionMeta] = useState<{ aiUsed: boolean; modified: boolean; aiError?: string } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -348,6 +352,19 @@ export function App() {
   const activeSample = selectedSampleId === CUSTOM_SAMPLE_ID ? undefined : getSampleById(selectedSampleId);
   const irJson = useMemo(() => kstory.ir ? JSON.stringify(kstory.ir, null, 2) : '', [kstory.ir]);
   const bpmnXml = useMemo(() => kstory.bpmnXml ?? '', [kstory.bpmnXml]);
+  
+  // Extract forms from IR user tasks
+  const detectedForms = useMemo<FormDefinition[]>(() => {
+    if (!kstory.ir?.states) return [];
+    const forms: FormDefinition[] = [];
+    for (const state of kstory.ir.states) {
+      if (state.kind === 'userTask' && state.form) {
+        forms.push(state.form);
+      }
+    }
+    return forms;
+  }, [kstory.ir]);
+  
   const defaultBpmnFilename = useMemo(() => {
     const metadataSourceCandidate = kstory.metadata?.['sourceFilename'];
     const metadataSource = typeof metadataSourceCandidate === 'string' ? metadataSourceCandidate : undefined;
@@ -1025,9 +1042,6 @@ export function App() {
           <span style={{fontSize:12,color:'#6b7280'}}>AI {aiEnabled? 'ON':'OFF'}</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <button onClick={()=>setLayoutMode('horizontal')} style={{padding:'4px 8px',background:layoutMode==='horizontal'?'#3b82f6':'#e5e7eb',color:layoutMode==='horizontal'?'#fff':'#374151',border:'none',borderRadius:4,cursor:'pointer'}}>Side</button>
-          <button onClick={()=>setLayoutMode('vertical')} style={{padding:'4px 8px',background:layoutMode==='vertical'?'#3b82f6':'#e5e7eb',color:layoutMode==='vertical'?'#fff':'#374151',border:'none',borderRadius:4,cursor:'pointer'}}>Stack</button>
-          <button onClick={()=>setShowGraph(g=>!g)} style={{padding:'4px 8px',background:showGraph?'#059669':'#6b7280',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>{showGraph?'Graph ON':'Graph OFF'}</button>
           <button onClick={()=>setShowAiSetup(s=>!s)} style={{padding:'4px 8px',background:aiEnabled?'#16a34a':'#f59e0b',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>{aiEnabled?'AI Ready':'Setup AI'}</button>
         </div>
       </header>
@@ -1040,8 +1054,9 @@ export function App() {
         </div>
       )}
 
-      <div id="main-container" style={{flex:1,display:'flex',flexDirection:layoutMode==='horizontal'?'row':'column',overflow:'hidden',minHeight:0}}>
-        <div style={{width:layoutMode==='horizontal'&&showGraph?`${leftPanelWidth}%`:'100%',height:layoutMode==='vertical'&&showGraph?`${leftPanelWidth}%`:'100%',display:'flex',flexDirection:'column',borderRight:showGraph&&layoutMode==='horizontal'?'1px solid #e5e7eb':'none',borderBottom:showGraph&&layoutMode==='vertical'?'1px solid #e5e7eb':'none',background:'#fff',minWidth:0,minHeight:0}}>
+      <div id="main-container" style={{flex:1,display:'flex',flexDirection:'row',overflow:'hidden',minHeight:0}}>
+        {/* Left Panel - KFlow Editor */}
+        <div style={{width:`${leftPanelWidth}%`,display:'flex',flexDirection:'column',borderRight:'1px solid #e5e7eb',background:'#fff',minWidth:0,minHeight:0}}>
           <div style={{padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid #e5e7eb',gap:12}}>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               <span style={{fontWeight:600}}>Story</span>
@@ -1390,24 +1405,32 @@ export function App() {
           )}
         </div>
 
-        {showGraph && (
-          <div style={{display:'flex',flexDirection:layoutMode==='horizontal'?'row':'column',flex:1,minWidth:0,minHeight:0}}>
-            <div onMouseDown={handleMouseDown} style={{width:layoutMode==='horizontal'?'4px':'100%',height:layoutMode==='vertical'?'4px':'100%',background:isDragging?'#3b82f6':'#e5e7eb',cursor:layoutMode==='horizontal'?'col-resize':'row-resize'}} />
-            <div style={{flex:1,minWidth:0,minHeight:0,background:'#fff',display:'flex',flexDirection:'column'}}>
-              <div style={{padding:'6px 10px',borderBottom:'1px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span style={{fontSize:12,fontWeight:600}}>Graph</span>
-                <div style={{display:'flex',gap:6}}>
-                  <button onClick={()=>setGraphFullscreen(true)} style={{padding:'4px 8px',background:'#3b82f6',color:'#fff',border:'none',borderRadius:4,cursor:'pointer'}}>Fullscreen</button>
-                </div>
-              </div>
-              <div style={{flex:1,minHeight:0}}>
-                <BpmnDiagram 
-                  xml={kstory.bpmnXml ?? undefined}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Resizer */}
+        <div onMouseDown={handleMouseDown} style={{width:'4px',background:isDragging?'#3b82f6':'#e5e7eb',cursor:'col-resize'}} />
+        
+        {/* Right Panel - Dual Tabs */}
+        <DualTabPanel
+          irJson={irJson}
+          bpmnXml={bpmnXml}
+          converted={converted}
+          detectedForms={detectedForms}
+          clarifications={clarifications}
+          severitySummary={severitySummary}
+          sortedPrompts={sortedPrompts}
+          insightTags={insightTags}
+          confidenceBarWidth={confidenceBarWidth}
+          confidenceBarColor={confidenceBarColor}
+          confidencePercentage={confidencePercentage}
+          copyFeedback={copyFeedback}
+          SEVERITY_ORDER={SEVERITY_ORDER}
+          CLARIFICATION_TEXT={CLARIFICATION_TEXT}
+          CLARIFICATION_SURFACE={CLARIFICATION_SURFACE}
+          CLARIFICATION_PALETTE={CLARIFICATION_PALETTE}
+          CLARIFICATION_SEVERITY_LABEL={CLARIFICATION_SEVERITY_LABEL}
+          formatCategoryLabel={formatCategoryLabel}
+          handleCopyToClipboard={handleCopyToClipboard}
+          handleDownloadBpmn={handleDownloadBpmn}
+        />
       </div>
 
       {graphFullscreen && (

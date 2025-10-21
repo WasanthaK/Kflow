@@ -46,6 +46,14 @@ const BPMN_NS = {
     'bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI"',
 };
 
+// Graph layout types
+type GraphNode = {
+  id: string;
+  element: BpmnElement;
+  layer: number;
+  positionInLayer: number;
+  lane: LaneRecord;
+};
 
 type WaitState = Extract<IRState, { kind: 'wait' }>;
 
@@ -568,9 +576,158 @@ export function irToBpmnXml(ir: IR): string {
       ].join('\n')
     : '';
 
+  // === LAYERED GRAPH LAYOUT ALGORITHM ===
+  
+  /**
+   * Assigns each node to a layer using a topological sort approach.
+   * Nodes with no predecessors go to layer 0, and each node is placed
+   * at the maximum layer of its predecessors + 1.
+   */
+  const assignLayers = (elements: BpmnElement[], flows: SequenceFlow[]): Map<string, number> => {
+    const layers = new Map<string, number>();
+    const inDegree = new Map<string, number>();
+    const outgoing = new Map<string, string[]>();
+    
+    // Build adjacency list and in-degree count
+    elements.forEach(el => {
+      inDegree.set(el.id, 0);
+      outgoing.set(el.id, []);
+    });
+    
+    flows.forEach(flow => {
+      inDegree.set(flow.targetRef, (inDegree.get(flow.targetRef) || 0) + 1);
+      const targets = outgoing.get(flow.sourceRef) || [];
+      targets.push(flow.targetRef);
+      outgoing.set(flow.sourceRef, targets);
+    });
+    
+    // Find all nodes with no incoming edges (start nodes)
+    const queue: string[] = [];
+    elements.forEach(el => {
+      if (inDegree.get(el.id) === 0) {
+        layers.set(el.id, 0);
+        queue.push(el.id);
+      }
+    });
+    
+    // Process nodes layer by layer
+    while (queue.length > 0) {
+      const nodeId = queue.shift()!;
+      const currentLayer = layers.get(nodeId) || 0;
+      
+      const targets = outgoing.get(nodeId) || [];
+      targets.forEach(targetId => {
+        const currentTargetLayer = layers.get(targetId);
+        const newLayer = currentLayer + 1;
+        
+        // Place target at max layer of all predecessors + 1
+        if (currentTargetLayer === undefined || newLayer > currentTargetLayer) {
+          layers.set(targetId, newLayer);
+        }
+        
+        // Decrease in-degree and add to queue if all predecessors processed
+        const degree = inDegree.get(targetId)! - 1;
+        inDegree.set(targetId, degree);
+        if (degree === 0) {
+          queue.push(targetId);
+        }
+      });
+    }
+    
+    // Handle any remaining nodes (cycles or disconnected)
+    elements.forEach(el => {
+      if (!layers.has(el.id)) {
+        layers.set(el.id, 0);
+      }
+    });
+    
+    return layers;
+  };
+
+  /**
+   * Orders nodes within each layer to minimize edge crossings.
+   * Uses barycenter heuristic: position based on average position of neighbors.
+   */
+  const orderNodesInLayers = (
+    layerMap: Map<string, number>,
+    elements: BpmnElement[],
+    flows: SequenceFlow[]
+  ): Map<string, number> => {
+    const positions = new Map<string, number>();
+    const maxLayer = Math.max(...Array.from(layerMap.values()));
+    
+    // Group nodes by layer
+    const layerNodes = new Map<number, string[]>();
+    for (let i = 0; i <= maxLayer; i++) {
+      layerNodes.set(i, []);
+    }
+    elements.forEach(el => {
+      const layer = layerMap.get(el.id) || 0;
+      layerNodes.get(layer)!.push(el.id);
+    });
+    
+    // Build adjacency
+    const incoming = new Map<string, string[]>();
+    const outgoing = new Map<string, string[]>();
+    elements.forEach(el => {
+      incoming.set(el.id, []);
+      outgoing.set(el.id, []);
+    });
+    flows.forEach(flow => {
+      incoming.get(flow.targetRef)!.push(flow.sourceRef);
+      outgoing.get(flow.sourceRef)!.push(flow.targetRef);
+    });
+    
+    // Initial ordering: just use current order
+    for (let layer = 0; layer <= maxLayer; layer++) {
+      const nodes = layerNodes.get(layer)!;
+      nodes.forEach((nodeId, index) => {
+        positions.set(nodeId, index);
+      });
+    }
+    
+    // Iteratively improve ordering using barycenter heuristic
+    for (let iteration = 0; iteration < 4; iteration++) {
+      // Forward pass: order based on predecessors
+      for (let layer = 1; layer <= maxLayer; layer++) {
+        const nodes = layerNodes.get(layer)!;
+        const barycenters: [string, number][] = nodes.map(nodeId => {
+          const preds = incoming.get(nodeId)!;
+          if (preds.length === 0) return [nodeId, positions.get(nodeId) || 0];
+          const avgPos = preds.reduce((sum, predId) => sum + (positions.get(predId) || 0), 0) / preds.length;
+          return [nodeId, avgPos];
+        });
+        
+        barycenters.sort((a, b) => a[1] - b[1]);
+        barycenters.forEach(([nodeId], index) => {
+          positions.set(nodeId, index);
+        });
+      }
+      
+      // Backward pass: order based on successors
+      for (let layer = maxLayer - 1; layer >= 0; layer--) {
+        const nodes = layerNodes.get(layer)!;
+        const barycenters: [string, number][] = nodes.map(nodeId => {
+          const succs = outgoing.get(nodeId)!;
+          if (succs.length === 0) return [nodeId, positions.get(nodeId) || 0];
+          const avgPos = succs.reduce((sum, succId) => sum + (positions.get(succId) || 0), 0) / succs.length;
+          return [nodeId, avgPos];
+        });
+        
+        barycenters.sort((a, b) => a[1] - b[1]);
+        barycenters.forEach(([nodeId], index) => {
+          positions.set(nodeId, index);
+        });
+      }
+    }
+    
+    return positions;
+  };
+
   const LANE_WIDTH = 320;
   const LANE_PADDING_TOP = 80;
-  const NODE_VERTICAL_GAP = 140;
+  const NODE_VERTICAL_GAP = 160; // Balanced spacing - not too tight, not too loose
+  const NODE_HORIZONTAL_GAP = 100; // Adequate horizontal spacing
 
   const TASK_DIMENSIONS = { width: 180, height: 90 } as const;
   const EVENT_DIMENSIONS = { width: 42, height: 42 } as const;
@@ -599,17 +756,140 @@ export function irToBpmnXml(ir: IR): string {
 
   const fallbackLane = elementLaneById.get(startStateElement.id) ?? ensureLane('Control Flow', 'control');
 
+  // === APPLY LAYERED GRAPH LAYOUT ===
+  const layerAssignments = assignLayers(processElements, flows);
+  const positionAssignments = orderNodesInLayers(layerAssignments, processElements, flows);
+  
   const elementBounds = new Map<string, Bounds>();
-  const laneOffsets = new Map<string, number>();
+  
+  // Group elements by lane and layer for positioning
+  const laneLayerGroups = new Map<string, Map<number, string[]>>();
+  processElements.forEach(element => {
+    const lane = elementLaneById.get(element.id) ?? fallbackLane;
+    const layer = layerAssignments.get(element.id) || 0;
+    
+    if (!laneLayerGroups.has(lane.id)) {
+      laneLayerGroups.set(lane.id, new Map());
+    }
+    const layerGroups = laneLayerGroups.get(lane.id)!;
+    if (!layerGroups.has(layer)) {
+      layerGroups.set(layer, []);
+    }
+    layerGroups.get(layer)!.push(element.id);
+  });
+  
+  // Swimlane-aware positioning algorithm
+  // Group elements by layer first to understand vertical organization
+  const elementsByLayer = new Map<number, string[]>();
+  processElements.forEach(element => {
+    const layer = layerAssignments.get(element.id) || 0;
+    if (!elementsByLayer.has(layer)) {
+      elementsByLayer.set(layer, []);
+    }
+    elementsByLayer.get(layer)!.push(element.id);
+  });
+
+  // Track Y positions used in each lane to handle vertical stacking within lanes
+  const laneYTracker = new Map<string, number[]>();
+  activeLanes.forEach(lane => {
+    laneYTracker.set(lane.id, []);
+  });
+
+  // Position elements layer by layer (top to bottom flow)
   processElements.forEach((element) => {
     const lane = elementLaneById.get(element.id) ?? fallbackLane;
     const laneIndex = lane.index;
+    const layer = layerAssignments.get(element.id) || 0;
+    
     const { width, height } = getElementDimensions(element);
-    const previousOffset = laneOffsets.get(lane.id) ?? LANE_PADDING_TOP;
-    const x = laneIndex * LANE_WIDTH + (LANE_WIDTH - width) / 2;
-    const y = previousOffset;
-    laneOffsets.set(lane.id, y + height + NODE_VERTICAL_GAP);
+    
+    // Calculate base Y position for this layer
+    const firstLayerPadding = layer === 0 ? 20 : 0;
+    const baseLayerY = LANE_PADDING_TOP + firstLayerPadding + layer * (TASK_DIMENSIONS.height + NODE_VERTICAL_GAP);
+    
+    // Check if there are already elements in this lane at this layer's Y position
+    const usedYPositions = laneYTracker.get(lane.id) || [];
+    let y = baseLayerY;
+    
+    // Find the next available Y position in this lane (avoid overlaps)
+    const minGap = 20; // Minimum gap between vertically stacked elements
+    for (const usedY of usedYPositions) {
+      if (Math.abs(y - usedY) < height + minGap) {
+        // Too close to an existing element, push down
+        y = Math.max(y, usedY + TASK_DIMENSIONS.height + minGap);
+      }
+    }
+    
+    // Record this Y position as used in this lane
+    usedYPositions.push(y);
+    usedYPositions.sort((a, b) => a - b);
+    laneYTracker.set(lane.id, usedYPositions);
+    
+    // Calculate X position: center in lane
+    const laneStart = laneIndex * LANE_WIDTH;
+    const laneCenter = laneStart + LANE_WIDTH / 2;
+    
+    // Check how many elements are at this same Y coordinate in this lane
+    const layerNodes = laneLayerGroups.get(lane.id)?.get(layer) || [element.id];
+    const currentIndexInLayerLane = layerNodes.indexOf(element.id);
+    
+    // For swimlane layouts, prefer centering single elements
+    // Only use horizontal distribution if there are 2-3 elements at same level
+    let x: number;
+    if (layerNodes.length === 1 || currentIndexInLayerLane === -1) {
+      // Single element at this layer in this lane: center it
+      x = laneCenter - width / 2;
+    } else if (layerNodes.length === 2) {
+      // Two elements: slight offset left/right from center
+      const offset = width / 3;
+      x = currentIndexInLayerLane === 0 ? laneCenter - offset - width / 2 : laneCenter + offset - width / 2;
+    } else {
+      // 3+ elements: they should have been in different layers ideally
+      // Fallback: slight horizontal offset or accept vertical stacking
+      const offset = (currentIndexInLayerLane % 3) * 30 - 30; // -30, 0, +30
+      x = laneCenter + offset - width / 2;
+    }
+    
+    // Ensure within lane bounds
+    const minX = laneStart + 10;
+    const maxX = laneStart + LANE_WIDTH - width - 10;
+    x = Math.max(minX, Math.min(x, maxX));
+    
     elementBounds.set(element.id, { x, y, width, height });
+  });
+
+  // Post-process: Final overlap detection and resolution
+  const nodesByLane = new Map<string, Array<{ id: string; bounds: Bounds }>>();
+  processElements.forEach(element => {
+    const lane = elementLaneById.get(element.id) ?? fallbackLane;
+    const bounds = elementBounds.get(element.id);
+    if (!bounds) return;
+    
+    if (!nodesByLane.has(lane.id)) {
+      nodesByLane.set(lane.id, []);
+    }
+    nodesByLane.get(lane.id)!.push({ id: element.id, bounds });
+  });
+  
+  // Final pass: ensure no overlaps within each lane
+  nodesByLane.forEach((nodes) => {
+    // Sort by Y position for sequential overlap checking
+    nodes.sort((a, b) => a.bounds.y - b.bounds.y);
+    
+    for (let i = 1; i < nodes.length; i++) {
+      const prev = nodes[i - 1].bounds;
+      const curr = nodes[i].bounds;
+      const minVerticalGap = 80; // Increased from 60 for better readability and routing space
+      
+      // Check for vertical overlap or too-close spacing
+      const prevBottom = prev.y + prev.height;
+      if (curr.y < prevBottom + minVerticalGap) {
+        // Adjust current node down
+        const newY = prevBottom + minVerticalGap;
+        curr.y = newY;
+        elementBounds.set(nodes[i].id, curr);
+      }
+    }
   });
 
   for (const element of processElements) {
@@ -659,14 +939,60 @@ export function irToBpmnXml(ir: IR): string {
     .filter(Boolean)
     .join('\n');
 
+  // Track multiple outgoing flows from each element to assign different exit ports
+  const outgoingFlowsBySource = new Map<string, SequenceFlow[]>();
+  const incomingFlowsByTarget = new Map<string, SequenceFlow[]>();
+  
+  flows.forEach(flow => {
+    if (!outgoingFlowsBySource.has(flow.sourceRef)) {
+      outgoingFlowsBySource.set(flow.sourceRef, []);
+    }
+    outgoingFlowsBySource.get(flow.sourceRef)!.push(flow);
+    
+    if (!incomingFlowsByTarget.has(flow.targetRef)) {
+      incomingFlowsByTarget.set(flow.targetRef, []);
+    }
+    incomingFlowsByTarget.get(flow.targetRef)!.push(flow);
+  });
+
+  // Generate initial waypoints for all flows
+  const flowWaypoints = new Map<string, Waypoint[]>();
+  flows.forEach(flow => {
+    const sourceBounds = elementBounds.get(flow.sourceRef);
+    const targetBounds = elementBounds.get(flow.targetRef);
+    if (!sourceBounds || !targetBounds) return;
+    
+    const sourceFlows = outgoingFlowsBySource.get(flow.sourceRef) || [];
+    const flowIndex = sourceFlows.indexOf(flow);
+    const totalSourceFlows = sourceFlows.length;
+    
+    const targetFlows = incomingFlowsByTarget.get(flow.targetRef) || [];
+    const targetFlowIndex = targetFlows.indexOf(flow);
+    const totalTargetFlows = targetFlows.length;
+    
+    const points = computeWaypointsWithPorts(
+      sourceBounds, 
+      targetBounds, 
+      flowIndex, 
+      totalSourceFlows,
+      targetFlowIndex,
+      totalTargetFlows,
+      flow.conditionExpression
+    );
+    
+    flowWaypoints.set(flow.id, points);
+  });
+
+  // Post-process: Detect and fix overlapping line segments
+  resolveLineOverlaps(flowWaypoints);
+
   const edgeXml = flows
     .map(flow => {
-      const sourceBounds = elementBounds.get(flow.sourceRef);
-      const targetBounds = elementBounds.get(flow.targetRef);
-      if (!sourceBounds || !targetBounds) {
+      const points = flowWaypoints.get(flow.id);
+      if (!points || points.length === 0) {
         return '';
       }
-      const points = computeWaypoints(sourceBounds, targetBounds);
+      
       const waypointXml = points
         .map(point => `        <di:waypoint x="${roundCoord(point.x)}" y="${roundCoord(point.y)}" />`)
         .join('\n');
@@ -914,41 +1240,274 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function computeWaypoints(source: Bounds, target: Bounds): Waypoint[] {
-  const startDock = dock(source, target);
-  const endDock = dock(target, source);
-  const start = startDock.point;
-  const end = endDock.point;
+/**
+ * Detect and resolve overlapping line segments by displacing them
+ * Rule: If horizontal lines overlap, displace by ±20px in Y
+ *       If vertical lines overlap, displace by ±20px in X
+ */
+function resolveLineOverlaps(flowWaypoints: Map<string, Waypoint[]>): void {
+  const DISPLACEMENT = 25; // Increased displacement for clearer separation
+  const OVERLAP_TOLERANCE = 8; // Increased tolerance to catch near-overlaps
+  
+  type LineSegment = {
+    flowId: string;
+    segmentIndex: number;
+    start: Waypoint;
+    end: Waypoint;
+    isHorizontal: boolean;
+    isVertical: boolean;
+  };
+  
+  // Extract all line segments from all flows
+  const segments: LineSegment[] = [];
+  for (const [flowId, waypoints] of flowWaypoints.entries()) {
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      const start = waypoints[i];
+      const end = waypoints[i + 1];
+      const isHorizontal = Math.abs(start.y - end.y) < OVERLAP_TOLERANCE;
+      const isVertical = Math.abs(start.x - end.x) < OVERLAP_TOLERANCE;
+      
+      segments.push({
+        flowId,
+        segmentIndex: i,
+        start,
+        end,
+        isHorizontal,
+        isVertical
+      });
+    }
+  }
+  
+  // Check each segment against all other segments for overlaps
+  for (let i = 0; i < segments.length; i++) {
+    const seg1 = segments[i];
+    
+    for (let j = i + 1; j < segments.length; j++) {
+      const seg2 = segments[j];
+      
+      // Check horizontal line overlap
+      if (seg1.isHorizontal && seg2.isHorizontal) {
+        const y1 = seg1.start.y;
+        const y2 = seg2.start.y;
+        
+        // If Y coordinates are very close (overlapping)
+        if (Math.abs(y1 - y2) < OVERLAP_TOLERANCE) {
+          // Check if X ranges overlap
+          const x1Min = Math.min(seg1.start.x, seg1.end.x);
+          const x1Max = Math.max(seg1.start.x, seg1.end.x);
+          const x2Min = Math.min(seg2.start.x, seg2.end.x);
+          const x2Max = Math.max(seg2.start.x, seg2.end.x);
+          
+          if (x1Min < x2Max && x2Min < x1Max) {
+            // Lines overlap! Displace the second one
+            const waypoints2 = flowWaypoints.get(seg2.flowId)!;
+            waypoints2[seg2.segmentIndex].y += DISPLACEMENT;
+            waypoints2[seg2.segmentIndex + 1].y += DISPLACEMENT;
+            
+            // Update the segment reference
+            seg2.start.y += DISPLACEMENT;
+            seg2.end.y += DISPLACEMENT;
+          }
+        }
+      }
+      
+      // Check vertical line overlap
+      if (seg1.isVertical && seg2.isVertical) {
+        const x1 = seg1.start.x;
+        const x2 = seg2.start.x;
+        
+        // If X coordinates are very close (overlapping)
+        if (Math.abs(x1 - x2) < OVERLAP_TOLERANCE) {
+          // Check if Y ranges overlap
+          const y1Min = Math.min(seg1.start.y, seg1.end.y);
+          const y1Max = Math.max(seg1.start.y, seg1.end.y);
+          const y2Min = Math.min(seg2.start.y, seg2.end.y);
+          const y2Max = Math.max(seg2.start.y, seg2.end.y);
+          
+          if (y1Min < y2Max && y2Min < y1Max) {
+            // Lines overlap! Displace the second one
+            const waypoints2 = flowWaypoints.get(seg2.flowId)!;
+            waypoints2[seg2.segmentIndex].x += DISPLACEMENT;
+            waypoints2[seg2.segmentIndex + 1].x += DISPLACEMENT;
+            
+            // Update the segment reference
+            seg2.start.x += DISPLACEMENT;
+            seg2.end.x += DISPLACEMENT;
+          }
+        }
+      }
+    }
+  }
+}
 
-  const waypoints: Waypoint[] = [start];
+/**
+ * Enhanced waypoint calculation with port-aware routing to prevent overlapping connectors
+ */
+function computeWaypointsWithPorts(
+  source: Bounds, 
+  target: Bounds,
+  flowIndex: number,
+  totalFlowsFromSource: number,
+  targetFlowIndex: number,
+  totalFlowsToTarget: number,
+  conditionExpression?: string
+): Waypoint[] {
+  const sourceCenter = center(source);
+  const targetCenter = center(target);
+  const waypoints: Waypoint[] = [];
+  
+  // Determine flow direction
+  const deltaX = targetCenter.x - sourceCenter.x;
+  const deltaY = targetCenter.y - sourceCenter.y;
+  const isBackward = target.y < source.y + source.height / 2;
+  const horizontalOffset = Math.abs(deltaX);
+  const verticalOffset = Math.abs(deltaY);
+  
+  // Calculate port offset for multiple connections
+  // This prevents overlapping at connection points
+  const getPortOffset = (index: number, total: number, maxWidth: number): number => {
+    if (total === 1) return 0;
+    if (total === 2) {
+      // For gateways with true/false branches - increased separation
+      // 45% provides clearer distinction at the exit point
+      return index === 0 ? -maxWidth * 0.45 : maxWidth * 0.45;
+    }
+    // For more than 2, distribute with wider spacing
+    const spacing = maxWidth * 0.7 / (total + 1);
+    return (index + 1) * spacing - maxWidth * 0.35;
+  };
+  
+  // Determine if this should be a horizontal or vertical flow based on layout
+  const VERTICAL_PRIORITY_BUFFER = 30;
+  const isHorizontalFlow = horizontalOffset > verticalOffset + VERTICAL_PRIORITY_BUFFER;
 
-  if (startDock.direction === 'right' && endDock.direction === 'left') {
-    const midX = (start.x + end.x) / 2;
-    waypoints.push({ x: midX, y: start.y });
-    waypoints.push({ x: midX, y: end.y });
-  } else if (startDock.direction === 'left' && endDock.direction === 'right') {
-    const midX = (start.x + end.x) / 2;
-    waypoints.push({ x: midX, y: start.y });
-    waypoints.push({ x: midX, y: end.y });
-  } else if (startDock.direction === 'bottom' && endDock.direction === 'top') {
-    const midY = (start.y + end.y) / 2;
-    waypoints.push({ x: start.x, y: midY });
-    waypoints.push({ x: end.x, y: midY });
-  } else if (startDock.direction === 'top' && endDock.direction === 'bottom') {
-    const midY = (start.y + end.y) / 2;
-    waypoints.push({ x: start.x, y: midY });
-    waypoints.push({ x: end.x, y: midY });
+  // Minimum extension before bending - reduced for clearer visual connection
+  const MIN_EXTENSION = 35;
+
+  const movePoint = (point: Waypoint, direction: 'top' | 'bottom' | 'left' | 'right', distance: number): Waypoint => {
+    switch (direction) {
+      case 'top':
+        return { x: point.x, y: point.y - distance };
+      case 'bottom':
+        return { x: point.x, y: point.y + distance };
+      case 'left':
+        return { x: point.x - distance, y: point.y };
+      case 'right':
+      default:
+        return { x: point.x + distance, y: point.y };
+    }
+  };
+  
+  // Choose connection points based on flow direction
+  let sourcePoint: Waypoint;
+  let targetPoint: Waypoint;
+  let sourceExitDirection: 'top' | 'bottom' | 'left' | 'right';
+  let targetEntryDirection: 'top' | 'bottom' | 'left' | 'right';
+  
+  if (isHorizontalFlow) {
+    // Horizontal flow: use left/right exits
+    const isGoingRight = targetCenter.x > sourceCenter.x;
+    const sourcePortOffset = getPortOffset(flowIndex, totalFlowsFromSource, source.height * 0.8);
+    const targetPortOffset = getPortOffset(targetFlowIndex, totalFlowsToTarget, target.height * 0.8);
+    
+    if (isGoingRight) {
+      sourcePoint = { x: source.x + source.width, y: sourceCenter.y + sourcePortOffset };
+      targetPoint = { x: target.x, y: targetCenter.y + targetPortOffset };
+      sourceExitDirection = 'right';
+      targetEntryDirection = 'left';
+    } else {
+      sourcePoint = { x: source.x, y: sourceCenter.y + sourcePortOffset };
+      targetPoint = { x: target.x + target.width, y: targetCenter.y + targetPortOffset };
+      sourceExitDirection = 'left';
+      targetEntryDirection = 'right';
+    }
   } else {
-    const midPoint: Waypoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-    waypoints.push(midPoint);
+    // Vertical flow: use top/bottom exits
+    const sourcePortOffset = getPortOffset(flowIndex, totalFlowsFromSource, source.width * 0.8);
+    const targetPortOffset = getPortOffset(targetFlowIndex, totalFlowsToTarget, target.width * 0.8);
+    
+    if (isBackward) {
+      // Exit from top
+      sourcePoint = { x: sourceCenter.x + sourcePortOffset, y: source.y };
+      targetPoint = { x: targetCenter.x + targetPortOffset, y: target.y + target.height };
+      sourceExitDirection = 'top';
+      targetEntryDirection = 'bottom';
+    } else {
+      // Exit from bottom
+      sourcePoint = { x: sourceCenter.x + sourcePortOffset, y: source.y + source.height };
+      targetPoint = { x: targetCenter.x + targetPortOffset, y: target.y };
+      sourceExitDirection = 'bottom';
+      targetEntryDirection = 'top';
+    }
+  }
+  
+  waypoints.push(sourcePoint);
+
+  const baseSeparation = totalFlowsFromSource > 1 ? 15 : 0;
+  const staggerAmount = totalFlowsFromSource > 1 ? 10 : 0;
+  const separationDistance = baseSeparation + (flowIndex * staggerAmount);
+  const extensionDistance = MIN_EXTENSION + separationDistance;
+
+  const extendedSource = movePoint(sourcePoint, sourceExitDirection, extensionDistance);
+  waypoints.push(extendedSource);
+
+  // Route with a simple orthogonal path after the required straight segment
+  if (sourceExitDirection === 'top' || sourceExitDirection === 'bottom') {
+    if (Math.abs(extendedSource.x - targetPoint.x) > 1) {
+      waypoints.push({ x: targetPoint.x, y: extendedSource.y });
+    }
+
+    const availableVertical = Math.abs(extendedSource.y - targetPoint.y);
+    let approachDistance = Math.min(30, availableVertical * 0.4);
+
+    if (totalFlowsToTarget > 1) {
+      const baseApproach = 15;
+      const approachStagger = 5;
+      approachDistance = Math.max(approachDistance, baseApproach + (targetFlowIndex * approachStagger));
+    }
+
+    if (approachDistance > 5) {
+      if (targetEntryDirection === 'top') {
+        waypoints.push({ x: targetPoint.x, y: targetPoint.y - approachDistance });
+      } else {
+        waypoints.push({ x: targetPoint.x, y: targetPoint.y + approachDistance });
+      }
+    }
+  } else {
+    if (Math.abs(extendedSource.y - targetPoint.y) > 1) {
+      waypoints.push({ x: extendedSource.x, y: targetPoint.y });
+    }
+
+    const availableHorizontal = Math.abs(extendedSource.x - targetPoint.x);
+    let approachDistance = Math.min(30, availableHorizontal * 0.4);
+
+    if (totalFlowsToTarget > 1) {
+      const baseApproach = 15;
+      const approachStagger = 5;
+      approachDistance = Math.max(approachDistance, baseApproach + (targetFlowIndex * approachStagger));
+    }
+
+    if (approachDistance > 5) {
+      if (targetEntryDirection === 'left') {
+        waypoints.push({ x: targetPoint.x - approachDistance, y: targetPoint.y });
+      } else {
+        waypoints.push({ x: targetPoint.x + approachDistance, y: targetPoint.y });
+      }
+    }
   }
 
-  waypoints.push(end);
-
-  // Remove consecutive duplicates to keep DI tidy
-  return waypoints.filter((point, index, arr) => {
-    if (index === 0) return true;
-    const prev = arr[index - 1];
-    return prev.x !== point.x || prev.y !== point.y;
-  });
+  waypoints.push(targetPoint);
+  
+  // Remove consecutive duplicates while preserving routing geometry
+  const filtered: Waypoint[] = [];
+  for (let i = 0; i < waypoints.length; i++) {
+    const current = waypoints[i];
+    const prev = filtered[filtered.length - 1];
+    
+    if (!prev || prev.x !== current.x || prev.y !== current.y) {
+      filtered.push(current);
+    }
+  }
+  
+  return filtered;
 }
